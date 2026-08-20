@@ -122,11 +122,28 @@ function readRows_(sheet) {
     rows.push({
       journee: journee,
       equipe: equipe,
-      formation: String(row[COL_FORMATION - 1] || '').trim(),
+      formation: formationText_(row[COL_FORMATION - 1]),
       joueurs: joueurs
     });
   }
   return rows;
+}
+
+/**
+ * Google Sheets aggressively auto-converts text that looks date-like into
+ * an actual date — typing "4-3-3" into a plain (non-text-formatted) cell
+ * gets silently reinterpreted as 4/3/(20)03 (April 3rd 2003) and getValues()
+ * then hands back a real JS Date, not the string "4-3-3". Reconstruct the
+ * original digits from that date rather than showing a stringified Date.
+ * The actual fix is formatting the Formation column as Plain Text in the
+ * sheet (Format > Number > Plain text) so this never happens in the first
+ * place — this is just a defensive fallback in case that slips.
+ */
+function formationText_(raw) {
+  if (Object.prototype.toString.call(raw) === '[object Date]') {
+    return (raw.getMonth() + 1) + '-' + raw.getDate() + '-' + (raw.getFullYear() % 100);
+  }
+  return String(raw || '').trim();
 }
 
 function orderedJourneeList_(rows) {
