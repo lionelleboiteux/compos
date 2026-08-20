@@ -501,6 +501,10 @@
       if (defaultJournee) {
         select.value = defaultJournee;
         loadJournee(defaultJournee);
+      } else {
+        select.appendChild(el('option', { text: 'Aucune journée disponible' }));
+        select.disabled = true;
+        teamGrid.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition n’a encore été renseignée.' }));
       }
     })
     .catch(function (err) {
