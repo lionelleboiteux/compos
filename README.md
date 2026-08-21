@@ -38,11 +38,14 @@ Journée | Équipe | Formation | J1 | J2 | J3 | J4 | J5 | J6 | J7 | J8 | J9 | J1
 ```
 
 - `J1` is always the **goalkeeper**.
-- `J2` onward are outfield players entered **in formation order** — e.g.
-  for a `4-3-3`: `J2`–`J5` = defenders, `J6`–`J8` = midfielders, `J9`–`J11`
-  = attackers. The frontend groups players into pitch lines purely from
-  this position in the row plus the `Formation` column, so this ordering
-  matters — the app doesn't validate or infer it.
+- `J2` onward are outfield players entered **in formation order, right to
+  left** (as viewed from behind the team's own goal) — e.g. for a `4-3-3`:
+  `J2` = right-back … `J5` = left-back, `J6` = right-sided midfielder …
+  `J8` = left-sided midfielder, `J9` = right-sided forward … `J11` =
+  left-sided forward. The frontend groups players into pitch lines and
+  orders them left-to-right purely from this position in the row plus the
+  `Formation` column, so this ordering matters — the app doesn't validate
+  or infer it.
 - `Formation` is free text like `4-3-3` or `4-2-3-1` (any `-`-separated
   numbers summing to 10 work — nothing is hardcoded to specific
   formations).

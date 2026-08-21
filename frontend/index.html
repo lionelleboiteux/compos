@@ -385,7 +385,10 @@
 
   function renderLine(names) {
     var line = el('div', { class: 'pitch-line' });
-    names.forEach(function (name) {
+    // Sheet order within a line is entered right-to-left (e.g. for
+    // defenders, J2 = right-back ... J5 = left-back), but DOM/flexbox
+    // order renders left-to-right, so reverse to match.
+    names.slice().reverse().forEach(function (name) {
       var chip = el('div', { class: 'player-chip' });
       chip.appendChild(el('span', { class: 'player-dot', text: playerInitials(name) }));
       chip.appendChild(el('span', { class: 'player-label', text: name }));

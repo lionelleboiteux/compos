@@ -11,9 +11,12 @@
  * team per journée:
  *   Journée | Équipe | Formation | J1 | J2 | ... | J11
  * J1 is always the goalkeeper; J2 onward are outfield players entered in
- * formation order (e.g. for "4-3-3": J2–J5 = defenders, J6–J8 =
- * midfielders, J9–J11 = attackers). This ordering is a data-entry
- * convention — not derived or validated here.
+ * formation order, right to left as viewed from behind the team's own goal
+ * (e.g. for "4-3-3": J2 = right-back ... J5 = left-back, J6 = right-sided
+ * midfielder ... J8 = left-sided midfielder, J9 = right-sided forward ...
+ * J11 = left-sided forward). This ordering is a data-entry convention — not
+ * derived or validated here; the frontend reverses each line when rendering
+ * left-to-right on the pitch.
  *
  * Endpoints (all GET, no auth):
  *   ?meta=1             -> ["Journée 1", "Journée 2", ..., "Journée 34"]
