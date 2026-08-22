@@ -138,6 +138,8 @@
     .team-grid { grid-template-columns: repeat(3, 1fr); }
   }
   .team-card {
+    display: flex;
+    flex-direction: column;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -195,6 +197,10 @@
     justify-content: space-between;
     gap: 0.5rem;
     min-height: 300px;
+    /* Grows to fill whatever height the grid stretched .team-card to (all
+       cards in a row match the tallest), so formations with fewer lines
+       (e.g. 4-3-3) get a taller pitch rather than a shorter card. */
+    flex: 1;
     overflow: hidden;
   }
   .pitch::before {
@@ -228,14 +234,18 @@
        label length. */
     justify-content: center;
     align-items: flex-start;
-    gap: 1.1rem;
-    flex-wrap: wrap;
+    gap: clamp(0.3rem, 2vw, 1.1rem);
   }
   .player-chip {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
+    /* Shrink rather than wrap onto a second row if a line's chips don't
+       quite fit (grow:0 keeps them clustered by .pitch-line's
+       justify-content: center instead of spreading to fill the row). */
+    flex: 0 1 auto;
+    min-width: 0;
     max-width: 4.6rem;
   }
   .player-shirt {
@@ -390,6 +400,11 @@
     'Le Mans FC': '#009fe3'
   };
   var DEFAULT_SHIRT_COLOR = '#9ca3af';
+  // Goalkeepers traditionally wear a shirt distinct from the rest of the
+  // team (no per-team "keeper kit" color data exists anywhere we pull
+  // from, so this is one fixed neutral color for every team rather than
+  // an attempt at per-team accuracy).
+  var GK_SHIRT_COLOR = '#f2c40c';
 
   var SVG_NS = 'http://www.w3.org/2000/svg';
   // Simple short-sleeve jersey silhouette (shoulders + V-neck notch) in a
@@ -468,7 +483,7 @@
       pitch.appendChild(renderLine(outfield, color));
     }
 
-    pitch.appendChild(renderLine(gk ? [gk] : [], color));
+    pitch.appendChild(renderLine(gk ? [gk] : [], GK_SHIRT_COLOR));
     return pitch;
   }
 
