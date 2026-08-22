@@ -221,9 +221,15 @@
     position: relative;
     z-index: 1;
     display: flex;
-    justify-content: space-evenly;
+    /* Clustered around the center, not spread edge-to-edge: space-evenly
+       equalizes the gaps between item *edges*, which looks off-center once
+       labels have different widths (a line with one long name and one short
+       name visibly leans). Centering the group avoids that regardless of
+       label length. */
+    justify-content: center;
     align-items: flex-start;
-    gap: 0.25rem;
+    gap: 1.1rem;
+    flex-wrap: wrap;
   }
   .player-chip {
     display: flex;
@@ -232,18 +238,11 @@
     gap: 0.2rem;
     max-width: 4.6rem;
   }
-  .player-dot {
-    width: 1.7rem;
-    height: 1.7rem;
-    border-radius: 50%;
-    background: #ffffff;
-    color: var(--ink);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.65rem;
-    font-weight: 800;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  .player-shirt {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   }
   .player-label {
     color: #ffffff;
@@ -354,8 +353,63 @@
     'Paris SG': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_1_13_512x512_4a9438034a011c1368c52d097a93b98f.png',
     'Rennes': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_1_14_512x512_28c7492293ca34c6e26d6cb71e858a57.png',
     'Strasbourg': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_1_15_512x512_e9553990e86d8098a3cf94febe8b4b96.png',
-    'Toulouse': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_1_16_512x512_a7be4e575396227614acc0ed47083503.png'
+    'Toulouse': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_1_16_512x512_a7be4e575396227614acc0ed47083503.png',
+    // Troyes and Le Mans are this season's promoted clubs (confirmed
+    // directly against pronos' live team data), replacing Metz/Nantes from
+    // the table DNP's map was originally built against.
+    'Troyes': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_4_33_512x512_fa84337aa111aaf34990dd2590ba1789.png',
+    'Estac Troyes': 'https://s3.eu-west-1.amazonaws.com/image.mpg/assets/clubs/logo/2023_4_33_512x512_fa84337aa111aaf34990dd2590ba1789.png',
+    'Le Mans': 'https://s3.eu-west-1.amazonaws.com/image.mpg/daabb8d9-230e-4fe2-8214-682fbbdedb5e',
+    'Le Mans FC': 'https://s3.eu-west-1.amazonaws.com/image.mpg/daabb8d9-230e-4fe2-8214-682fbbdedb5e'
   };
+
+  // Approximate primary shirt colors, hand-picked for visual variety — not
+  // sourced from an API (no team-color data exists anywhere we pull from),
+  // so treat as decorative rather than official brand hex codes. Easy to
+  // tweak here if a color looks off.
+  var TEAM_COLORS = {
+    'Angers': '#111111',
+    'Auxerre': '#1c3f8f',
+    'Brest': '#dc1f26',
+    'Le Havre': '#0072ce',
+    'Lens': '#c8102e',
+    'Lille': '#d0021b',
+    'Lorient': '#ff6600',
+    'Lyon': '#002e62',
+    'Marseille': '#1a7dc4',
+    'Monaco': '#cc0000',
+    'Nice': '#1c1c1c',
+    'Paris FC': '#0033a0',
+    'Paris SG': '#04234c',
+    'Rennes': '#e2001a',
+    'Strasbourg': '#0055a4',
+    'Toulouse': '#6a0dad',
+    'Troyes': '#002868',
+    'Estac Troyes': '#002868',
+    'Le Mans': '#009fe3',
+    'Le Mans FC': '#009fe3'
+  };
+  var DEFAULT_SHIRT_COLOR = '#9ca3af';
+
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  // Simple short-sleeve jersey silhouette (shoulders + V-neck notch) in a
+  // 24x24 box — hand-built from primitives rather than a traced icon, so no
+  // external asset/license to track.
+  var SHIRT_PATH = 'M2,4 L8,2 L10,4 L14,4 L16,2 L22,4 L18,8 L18,22 L6,22 L6,8 Z';
+
+  function shirtIcon(color) {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'player-shirt');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    var path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', SHIRT_PATH);
+    path.setAttribute('fill', color || DEFAULT_SHIRT_COLOR);
+    path.setAttribute('stroke', '#ffffff');
+    path.setAttribute('stroke-width', '1');
+    path.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(path);
+    return svg;
+  }
 
   function teamInitials(equipe) {
     return String(equipe || '?')
@@ -363,15 +417,6 @@
       .map(function (w) { return w[0]; })
       .join('')
       .slice(0, 3)
-      .toUpperCase();
-  }
-
-  function playerInitials(name) {
-    return String(name || '?')
-      .split(/\s+/)
-      .map(function (w) { return w[0]; })
-      .join('')
-      .slice(0, 2)
       .toUpperCase();
   }
 
@@ -383,14 +428,14 @@
     return parts;
   }
 
-  function renderLine(names) {
+  function renderLine(names, color) {
     var line = el('div', { class: 'pitch-line' });
     // Sheet order within a line is entered right-to-left (e.g. for
     // defenders, J2 = right-back ... J5 = left-back), but DOM/flexbox
     // order renders left-to-right, so reverse to match.
     names.slice().reverse().forEach(function (name) {
       var chip = el('div', { class: 'player-chip' });
-      chip.appendChild(el('span', { class: 'player-dot', text: playerInitials(name) }));
+      chip.appendChild(shirtIcon(color));
       chip.appendChild(el('span', { class: 'player-label', text: name }));
       line.appendChild(chip);
     });
@@ -403,6 +448,7 @@
     var outfield = joueurs.slice(1);
     var lines = parseFormationLines(team.formation);
     var sum = lines ? lines.reduce(function (a, b) { return a + b; }, 0) : 0;
+    var color = TEAM_COLORS[team.equipe] || DEFAULT_SHIRT_COLOR;
 
     var pitch = el('div', { class: 'pitch' });
 
@@ -415,14 +461,14 @@
         idx += n;
         return g;
       });
-      groups.slice().reverse().forEach(function (g) { pitch.appendChild(renderLine(g)); });
+      groups.slice().reverse().forEach(function (g) { pitch.appendChild(renderLine(g, color)); });
     } else if (outfield.length) {
       // Formation string missing/malformed/inconsistent with the player
       // count — fall back to one undifferentiated line rather than guessing.
-      pitch.appendChild(renderLine(outfield));
+      pitch.appendChild(renderLine(outfield, color));
     }
 
-    pitch.appendChild(renderLine(gk ? [gk] : []));
+    pitch.appendChild(renderLine(gk ? [gk] : [], color));
     return pitch;
   }
 

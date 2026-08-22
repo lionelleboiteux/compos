@@ -106,10 +106,17 @@ file, append `?api=<url>` to the page's own URL instead.)
   current Ligue 1 gameweek from the public jeu-des-pronos API
   (`/v1/leagues/{id}/current`) and defaults the picker to that, falling
   back to the first journée in the list if that call fails.
-- **Team logos**: `TEAM_LOGOS` in `frontend/index.html` is copied verbatim
-  from DNP's frontend (sourced from the pronos Supabase `teams` table).
-  Metz and Nantes aren't in that table and fall back to a colored initials
-  badge, same as DNP — see DNP's README for the full explanation.
+- **Team logos**: `TEAM_LOGOS` in `frontend/index.html` is sourced from the
+  pronos Supabase `teams` table, matched by hand against this sheet's
+  `Équipe` values, and updated directly against live pronos game data when
+  Troyes/Le Mans were confirmed as this season's promoted clubs. Any team
+  name that doesn't match a key falls back to a colored initials badge
+  (`teamInitials()`) — including any future crest URL that 404s at runtime.
+- **Shirt colors**: `TEAM_COLORS` in `frontend/index.html` is a hand-picked,
+  best-effort approximation — no team-color data exists in any source this
+  project pulls from (pronos' API only has crests, not colors), so treat
+  these as decorative, not official brand hex codes. Any team missing from
+  the map renders in a neutral gray.
 - **Formation parsing is defensive, not validating**: if `Formation` is
   empty, malformed, or its numbers don't sum to the outfield player count
   actually entered, the frontend falls back to rendering all outfield
