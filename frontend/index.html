@@ -241,12 +241,14 @@
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    /* Shrink rather than wrap onto a second row if a line's chips don't
-       quite fit (grow:0 keeps them clustered by .pitch-line's
-       justify-content: center instead of spreading to fill the row). */
-    flex: 0 1 auto;
+    /* Fixed width, not content-based: a chip with a long/wrapping label
+       (e.g. "Rabillard (Colas)") must not be visually wider than a chip
+       with a short one, or the shirts stop being evenly spaced relative to
+       each other even though the row as a whole is still centered.
+       flex-shrink allowed as a safety net on very narrow screens. */
+    flex: 0 1 3.4rem;
     min-width: 0;
-    max-width: 4.6rem;
+    width: 3.4rem;
   }
   .player-shirt {
     width: 1.9rem;
