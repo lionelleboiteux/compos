@@ -112,6 +112,12 @@
   .intro p { margin: 0.5rem 0; }
   .journee-picker { margin-bottom: 1.5rem; }
   .journee-picker label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
+  .journee-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
   .journee-picker select {
     width: 100%;
     max-width: 320px;
@@ -121,6 +127,15 @@
     background: var(--card);
     color: var(--ink);
     font-size: 1rem;
+  }
+  /* Gameweek-wide accuracy score, next to the picker — deliberately much
+     bigger than any other text on the page, it's the headline number. */
+  .gameweek-score {
+    flex: none;
+    font-size: clamp(1.8rem, 6vw, 2.6rem);
+    font-weight: 800;
+    color: var(--fc-blue);
+    line-height: 1;
   }
   .status-line { color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0 1rem; }
   /* One card per team, cards fill the row on wide screens since a pitch
@@ -175,6 +190,18 @@
     font-weight: 700;
   }
   .team-name { flex: 1; font-weight: 700; }
+  /* Per-team accuracy mark, right after the team name — styled like a
+     hand-scrawled grade (bigger, bold, tilted) rather than a normal badge.
+     Only present once "actuelles" has a result recorded for this team. */
+  .team-score {
+    flex: none;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #d92b2b;
+    transform: rotate(-8deg);
+    display: inline-block;
+    line-height: 1;
+  }
   .team-formation {
     flex: none;
     background: #eaf3fc;
@@ -304,9 +331,12 @@
 
   <div class="journee-picker">
     <label for="journee-select">Journée</label>
-    <select id="journee-select" disabled>
-      <option>Chargement…</option>
-    </select>
+    <div class="journee-picker-row">
+      <select id="journee-select" disabled>
+        <option>Chargement…</option>
+      </select>
+      <span id="gameweek-score" class="gameweek-score"></span>
+    </div>
   </div>
 
   <p id="status-line" class="status-line"></p>
@@ -327,6 +357,7 @@
   var select = document.getElementById('journee-select');
   var statusLine = document.getElementById('status-line');
   var teamGrid = document.getElementById('team-grid');
+  var gameweekScoreEl = document.getElementById('gameweek-score');
 
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
@@ -509,6 +540,7 @@
         header.appendChild(el('span', { class: 'team-logo-fallback', text: teamInitials(team.equipe) }));
       }
       header.appendChild(el('span', { class: 'team-name', text: team.equipe }));
+      if (team.score) header.appendChild(el('span', { class: 'team-score', text: team.score.correct + '/' + team.score.total }));
       if (team.formation) header.appendChild(el('span', { class: 'team-formation', text: team.formation }));
       card.appendChild(header);
       card.appendChild(renderPitch(team));
@@ -516,15 +548,21 @@
     });
   }
 
+  function renderGameweekScore(score) {
+    gameweekScoreEl.textContent = score ? score.percent + '%' : '';
+  }
+
   function loadJournee(journee) {
     setStatus('Chargement…');
     teamGrid.innerHTML = '';
+    renderGameweekScore(null);
     fetch(API_BASE + '?journee=' + encodeURIComponent(journee))
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.error) throw new Error(data.error);
         setStatus('');
-        renderTeams(data);
+        renderTeams(data.equipes);
+        renderGameweekScore(data.score);
       })
       .catch(function (err) {
         setStatus('');

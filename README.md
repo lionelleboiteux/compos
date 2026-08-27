@@ -75,6 +75,27 @@ When the code changes later, redeploy via **Manage deployments > edit the
 active deployment > New version > Deploy** — always replacing the whole
 file first, for the same reason as step 2.
 
+### 2b. (Optional) Enable actual-composition tracking
+
+Separately from the Web App deployment above, `Code.gs` can also record the
+*actual* starting XIs after each gameweek finishes, pulled from
+ligue1.com's own public API, into a second tab called **"actuelles"**
+(auto-created if missing — no setup needed for the tab itself). This never
+touches the "Compos" tab.
+
+1. In the Apps Script editor, select `setupGameweekTrigger` in the function
+   dropdown and click **Run** once (grant the requested permissions —
+   it needs to add a trigger and make external requests). This installs an
+   hourly-ish (every 6h) time-driven trigger that checks whether the current
+   gameweek has advanced (via the same jeu-des-pronos API the frontend uses)
+   and, if so, fetches and records the gameweek just finished.
+2. To test without waiting, run `recordActualCompos_(1)` (with the gameweek
+   number you want) directly from the editor — it's idempotent, safe to
+   re-run.
+3. Re-running `setupGameweekTrigger` later (e.g. after redeploying) is safe;
+   it clears any trigger it previously installed first, so triggers never
+   stack up.
+
 ### 3. Point the frontend at the Web App
 
 Edit `frontend/index.html`, replace `REPLACE_WITH_APPS_SCRIPT_WEB_APP_URL`
@@ -122,3 +143,21 @@ file, append `?api=<url>` to the page's own URL instead.)
   actually entered, the frontend falls back to rendering all outfield
   players on a single undifferentiated line above the goalkeeper, rather
   than guessing or erroring.
+- **"actuelles" tab left/right ordering is unverified**: `actualCompoRow_`
+  in `Code.gs` orders each team's actual starters by ma-api.ligue1.fr's
+  `formationPlace` field, since that API exposes no explicit left/right side
+  per player — unlike "Compos", which relies on the teammate manually
+  entering players right-to-left. Spot-check a real gameweek's "actuelles"
+  rows against known matchday lineups before pointing any frontend rendering
+  at that tab. This doesn't affect the accuracy score below, which is
+  order-independent by design.
+- **Accuracy scoring**: once a team's actual result is recorded in
+  "actuelles", `doGet`'s `?journee=` response includes how many of that
+  team's 11 probable names (from "Compos") match its actual starters —
+  shown as a slanted mark (e.g. "9/11") right after the team name, order
+  doesn't matter. A probable entry written as `"Surname (Real Name)"`
+  counts as correct if *either* half matches the actual starter — one
+  guess, not two: a single actual name can't satisfy two different probable
+  rows. The gameweek-wide percentage (next to the journée picker) sums
+  those tallies across every team already scored — see `teamScore_` and
+  `journeePayload_` in `Code.gs` for the exact rules.
