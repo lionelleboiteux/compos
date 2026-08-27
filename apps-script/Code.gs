@@ -154,11 +154,21 @@ function doGet(e) {
  * until at least one team has one.
  */
 function journeePayload_(composRows, journee) {
+  // 'Compos' and 'actuelles' aren't guaranteed to spell a journée the same
+  // way — recordActualCompos_ always writes "Journée N", but 'Compos' is
+  // free text a teammate fills in by hand (observed in practice to be just
+  // "1", "2", ... some seasons). Match on the extracted gameweek NUMBER,
+  // not the raw string, so either tab can use either convention.
+  var targetGw = gameweekNumberFromJournee_(journee);
+
   var actuellesSheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME_RESULTS);
   var actuellesByEquipe = {};
   if (actuellesSheet) {
     readRows_(actuellesSheet).forEach(function (r) {
-      if (r.journee === journee) actuellesByEquipe[r.equipe] = r.joueurs;
+      var matches = isNaN(targetGw)
+        ? r.journee === journee
+        : gameweekNumberFromJournee_(r.journee) === targetGw;
+      if (matches) actuellesByEquipe[r.equipe] = r.joueurs;
     });
   }
 
@@ -182,6 +192,13 @@ function journeePayload_(composRows, journee) {
       ? { correct: totalCorrect, total: totalPossible, percent: Math.round(totalCorrect / totalPossible * 100) }
       : null
   };
+}
+
+// "Journée 12" -> 12, "12" -> 12, "J12" -> 12. NaN if no digits at all —
+// callers fall back to exact string comparison in that case.
+function gameweekNumberFromJournee_(journee) {
+  var m = String(journee || '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : NaN;
 }
 
 /**
