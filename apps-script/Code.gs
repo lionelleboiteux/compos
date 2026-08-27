@@ -457,7 +457,7 @@ function existingResultsKeys_(sheet) {
   values.forEach(function (r) {
     var journee = String(r[0] || '').trim();
     var equipe = String(r[1] || '').trim();
-    if (journee && equipe) keys[journee + ' ' + equipe] = true;
+    if (journee && equipe) keys[journee + ' ' + equipe] = true;
   });
   return keys;
 }
@@ -496,7 +496,7 @@ function fetchMatchDetail_(matchId) {
  * README) — the API doesn't expose an explicit left/right side, only
  * formationPlace/position/realUltraPosition numeric codes. Ordering here is
  * formationPlace ascending as a best guess; spot-check a real gameweek's
- * 'Résultats' rows against known lineups before trusting the L/R order the
+ * 'actuelles' rows against known lineups before trusting the L/R order the
  * frontend renders from this tab.
  */
 function actualCompoRow_(side) {
@@ -509,8 +509,13 @@ function actualCompoRow_(side) {
     .sort(function (a, b) { return (a.formationPlace || 0) - (b.formationPlace || 0); });
   if (starters.length === 0) return null;
 
+  // playerIdentity has firstName/lastName, no combined "name" field.
+  // lastName alone matches how ligue1.com's own UI labels the starting XI
+  // (confirmed against the site directly) and how 'Compos' is conventionally
+  // filled in (surnames, with a "Surname (Real Name)" bracket for
+  // disambiguation) — see teamScore_'s bracket-as-second-guess handling.
   var joueurs = starters.map(function (p) {
-    return p.playerIdentity ? p.playerIdentity.name : '';
+    return p.playerIdentity ? String(p.playerIdentity.lastName || '').trim() : '';
   }).filter(function (n) { return n; });
 
   return {
