@@ -26,7 +26,9 @@
  *   ?journee=Journée 12 -> {
  *                            equipes: [{ equipe, formation,
  *                                        joueurs: [11 names, GK first],
- *                                        score: { correct, total } | null }],
+ *                                        score: { correct, total } | null,
+ *                                        fixture: { opponent, isHome,
+ *                                                   kickoff } | null }],
  *                            score: { correct, total, percent } | null
  *                          }
  *                          Each team's `score` is how many of its 11
@@ -38,6 +40,14 @@
  *                          that has one yet; null until at least one does.
  *                          See journeePayload_/teamScore_ below for the
  *                          exact matching rules (bracket handling, etc).
+ *                          `fixture` is sourced live from ma-api.ligue1.fr
+ *                          (see fetchGameweekFixtures_) — `kickoff` is an
+ *                          ISO datetime, `opponent` is this project's short
+ *                          Équipe name (see API_TEAM_NAME_MAP). null when
+ *                          the gameweek number can't be resolved or the API
+ *                          call fails; a fixture-lookup failure never blocks
+ *                          the compo/formation data the rest of the
+ *                          response carries.
  *
  * Responses are cached in CacheService (script-wide, up to 6h) and
  * invalidated by bumping a version stamp in PropertiesService whenever the
@@ -175,6 +185,8 @@ function journeePayload_(composRows, journee) {
   var totalCorrect = 0;
   var totalPossible = 0;
 
+  var fixturesByEquipe = isNaN(targetGw) ? {} : fetchGameweekFixtures_(targetGw);
+
   var equipes = composRows
     .filter(function (r) { return r.journee === journee; })
     .map(function (r) {
@@ -183,7 +195,13 @@ function journeePayload_(composRows, journee) {
         totalCorrect += score.correct;
         totalPossible += score.total;
       }
-      return { equipe: r.equipe, formation: r.formation, joueurs: r.joueurs, score: score };
+      return {
+        equipe: r.equipe,
+        formation: r.formation,
+        joueurs: r.joueurs,
+        score: score,
+        fixture: fixturesByEquipe[r.equipe] || null
+      };
     });
 
   return {
@@ -485,6 +503,37 @@ function mapApiTeamName_(apiName) {
   // than dropping the row — same "defensive, not validating" approach as
   // formationText_ above; a mismatch is easy to spot and fix by hand.
   return API_TEAM_NAME_MAP[apiName] || apiName;
+}
+
+/**
+ * Home ground/away, opponent, and kickoff time for every team in one
+ * gameweek — sourced from the same match-week list fetchGameweekMatches_
+ * already calls for recordActualCompos_, but only that list call: each
+ * entry already carries `date`/`home`/`away`, so no per-match detail fetch
+ * (fetchMatchDetail_) is needed here, unlike recordActualCompos_ which also
+ * needs starters. Adds exactly one UrlFetchApp call to a cache-cold journée
+ * request, not one per match.
+ *
+ * Returns { equipe: { opponent, isHome, kickoff } }, or {} if the API call
+ * fails or returns nothing usable — fixture display is a nice-to-have on
+ * top of the compo/formation data, so a ligue1.fr outage here must never
+ * turn into a broken ?journee= response.
+ */
+function fetchGameweekFixtures_(gameweekNumber) {
+  var fixtures = {};
+  try {
+    fetchGameweekMatches_(gameweekNumber).forEach(function (m) {
+      if (!m.home || !m.away || !m.date) return;
+      var home = mapApiTeamName_(m.home.clubIdentity && m.home.clubIdentity.name);
+      var away = mapApiTeamName_(m.away.clubIdentity && m.away.clubIdentity.name);
+      if (!home || !away) return;
+      fixtures[home] = { opponent: away, isHome: true, kickoff: m.date };
+      fixtures[away] = { opponent: home, isHome: false, kickoff: m.date };
+    });
+  } catch (err) {
+    // Swallowed deliberately — see doc comment above.
+  }
+  return fixtures;
 }
 
 function fetchGameweekMatches_(gameweekNumber) {

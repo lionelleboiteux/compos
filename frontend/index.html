@@ -100,6 +100,29 @@
   @media (min-width: 960px) {
     .team-grid { grid-template-columns: repeat(3, 1fr); }
   }
+  /* One section per matchday (Vendredi/Samedi/Dimanche, ...), each holding
+     its own .team-grid — lets a visitor scan straight to "who plays when"
+     for live-substitute timing instead of hunting a flat grid. */
+  .day-section + .day-section { margin-top: 2rem; }
+  .day-heading {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Home/away + opponent + kickoff, right under the team header — the
+     kickoff time here (not just the day heading) is what tells apart two
+     cards that share the same matchday. */
+  .team-fixture {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: -0.35rem 0 0.75rem;
+  }
+  .fixture-icon { font-size: 0.9rem; line-height: 1; }
   .team-card {
     display: flex;
     flex-direction: column;
@@ -269,7 +292,7 @@
   </div>
 
   <p id="status-line" class="status-line"></p>
-  <div id="team-grid" class="team-grid"></div>
+  <div id="team-grid" class="journee-results"></div>
   <noscript><p>Activez JavaScript pour afficher les compositions probables.</p></noscript>
 
   <fc-feedback project="compos"></fc-feedback>
@@ -467,32 +490,122 @@
     return pitch;
   }
 
+  function renderTeamCard_(team) {
+    var card = el('div', { class: 'team-card' });
+    var header = el('div', { class: 'team-header' });
+    var logoUrl = TEAM_LOGOS[team.equipe];
+    if (logoUrl) {
+      var logo = el('img', { class: 'team-logo', src: logoUrl, alt: team.equipe });
+      logo.addEventListener('error', function () {
+        this.replaceWith(el('span', { class: 'team-logo-fallback', text: teamInitials(team.equipe) }));
+      });
+      header.appendChild(logo);
+    } else {
+      header.appendChild(el('span', { class: 'team-logo-fallback', text: teamInitials(team.equipe) }));
+    }
+    header.appendChild(el('span', { class: 'team-name', text: team.equipe }));
+    if (team.score) header.appendChild(el('span', { class: 'team-score', text: team.score.correct + '/' + team.score.total }));
+    if (team.formation) header.appendChild(el('span', { class: 'team-formation', text: team.formation }));
+    card.appendChild(header);
+    if (team.fixture) card.appendChild(renderFixtureLine_(team.fixture));
+    card.appendChild(renderPitch(team));
+    return card;
+  }
+
+  // Home/away icon + opponent + local kickoff time, e.g. "🏠 vs Lille ·
+  // 21:05". The icon alone (reçoit/se déplace) doesn't tell two cards
+  // sharing the same match apart, so the opponent name and kickoff time are
+  // what actually matter here for lining up live-substitute timing against
+  // the day grouping below.
+  function renderFixtureLine_(fixture) {
+    var d = new Date(fixture.kickoff);
+    var time = isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('fr-FR', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
+    }).format(d);
+    var icon = el('span', {
+      class: 'fixture-icon',
+      text: fixture.isHome ? '🏠' : '✈️',
+      title: fixture.isHome ? 'Reçoit' : 'Se déplace',
+      'aria-hidden': 'true'
+    });
+    var label = el('span', { text: 'vs ' + fixture.opponent + (time ? ' · ' + time : '') });
+    return el('div', { class: 'team-fixture' }, [icon, label]);
+  }
+
+  // "Journée 12" -> "Matchs du vendredi 5 septembre", grouped by Paris
+  // calendar day and ordered chronologically — this is what actually
+  // matters for lining up live substitutes match by match, rather than
+  // scanning a flat grid for kickoff times.
+  function dayGroupKey_(kickoffIso) {
+    var d = new Date(kickoffIso);
+    if (isNaN(d.getTime())) return null;
+    var parts = {};
+    new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Europe/Paris', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    if (!parts.year || !parts.month || !parts.day || !parts.weekday) return null;
+    return {
+      key: parts.year + '-' + parts.month + '-' + parts.day,
+      label: 'Matchs du ' + parts.weekday.charAt(0).toUpperCase() + parts.weekday.slice(1) +
+        ' ' + parts.day + ' ' + parts.month,
+      date: d
+    };
+  }
+
+  function groupTeamsByDay_(teams) {
+    var byKey = {};
+    var undated = [];
+    teams.forEach(function (team) {
+      var group = team.fixture ? dayGroupKey_(team.fixture.kickoff) : null;
+      if (!group) { undated.push(team); return; }
+      if (!byKey[group.key]) byKey[group.key] = { label: group.label, date: group.date, teams: [] };
+      byKey[group.key].teams.push(team);
+    });
+    var days = Object.keys(byKey).map(function (k) { return byKey[k]; })
+      .sort(function (a, b) { return a.date - b.date; });
+    days.forEach(function (day) {
+      day.teams.sort(function (a, b) { return new Date(a.fixture.kickoff) - new Date(b.fixture.kickoff); });
+    });
+    return { days: days, undated: undated };
+  }
+
   function renderTeams(teams) {
     teamGrid.innerHTML = '';
     if (!teams || teams.length === 0) {
       teamGrid.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition disponible pour cette journée.' }));
       return;
     }
-    teams.forEach(function (team) {
-      var card = el('div', { class: 'team-card' });
-      var header = el('div', { class: 'team-header' });
-      var logoUrl = TEAM_LOGOS[team.equipe];
-      if (logoUrl) {
-        var logo = el('img', { class: 'team-logo', src: logoUrl, alt: team.equipe });
-        logo.addEventListener('error', function () {
-          this.replaceWith(el('span', { class: 'team-logo-fallback', text: teamInitials(team.equipe) }));
-        });
-        header.appendChild(logo);
-      } else {
-        header.appendChild(el('span', { class: 'team-logo-fallback', text: teamInitials(team.equipe) }));
-      }
-      header.appendChild(el('span', { class: 'team-name', text: team.equipe }));
-      if (team.score) header.appendChild(el('span', { class: 'team-score', text: team.score.correct + '/' + team.score.total }));
-      if (team.formation) header.appendChild(el('span', { class: 'team-formation', text: team.formation }));
-      card.appendChild(header);
-      card.appendChild(renderPitch(team));
-      teamGrid.appendChild(card);
+
+    var grouped = groupTeamsByDay_(teams);
+
+    // No fixture data resolved for anyone (ligue1.fr unreachable, gameweek
+    // number not resolvable, ...) — fall back to one flat grid rather than
+    // an awkward "Autres rencontres" heading with nothing else to contrast
+    // it against.
+    if (grouped.days.length === 0) {
+      var flatGrid = el('div', { class: 'team-grid' });
+      teams.forEach(function (team) { flatGrid.appendChild(renderTeamCard_(team)); });
+      teamGrid.appendChild(flatGrid);
+      return;
+    }
+
+    grouped.days.forEach(function (day) {
+      var section = el('section', { class: 'day-section' });
+      section.appendChild(el('h2', { class: 'day-heading', text: day.label }));
+      var grid = el('div', { class: 'team-grid' });
+      day.teams.forEach(function (team) { grid.appendChild(renderTeamCard_(team)); });
+      section.appendChild(grid);
+      teamGrid.appendChild(section);
     });
+
+    if (grouped.undated.length) {
+      var section2 = el('section', { class: 'day-section' });
+      section2.appendChild(el('h2', { class: 'day-heading', text: 'Autres rencontres' }));
+      var grid2 = el('div', { class: 'team-grid' });
+      grouped.undated.forEach(function (team) { grid2.appendChild(renderTeamCard_(team)); });
+      section2.appendChild(grid2);
+      teamGrid.appendChild(section2);
+    }
   }
 
   function renderGameweekScore(score) {
