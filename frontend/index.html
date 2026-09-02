@@ -304,6 +304,22 @@
     statusLine.textContent = text || '';
   }
 
+  // The Apps Script web app's container spins down when idle, so the first
+  // request after a quiet period can hang for 10-40s or come back as a
+  // Google error page (non-JSON) instead of reaching the script at all —
+  // observed directly against this deployment, not a hypothetical. A couple
+  // of quick retries rides out that cold start instead of showing an error
+  // for what is, from the second attempt on, usually a sub-second response.
+  function fetchJson_(url, attemptsLeft, delayMs) {
+    return fetch(url)
+      .then(function (r) { return r.json(); })
+      .catch(function (err) {
+        if (attemptsLeft <= 1) throw err;
+        return new Promise(function (resolve) { setTimeout(resolve, delayMs); })
+          .then(function () { return fetchJson_(url, attemptsLeft - 1, delayMs * 2); });
+      });
+  }
+
   // Sourced from the pronos Supabase `teams` table (same account/project as
   // pronos.fantasy-coach.fr) — copied verbatim from l1.dnp.fantasy-coach.fr's
   // frontend, which already curated it by hand against real team names.
@@ -487,8 +503,7 @@
     setStatus('Chargement…');
     teamGrid.innerHTML = '';
     renderGameweekScore(null);
-    fetch(API_BASE + '?journee=' + encodeURIComponent(journee))
-      .then(function (r) { return r.json(); })
+    fetchJson_(API_BASE + '?journee=' + encodeURIComponent(journee), 3, 2000)
       .then(function (data) {
         if (data && data.error) throw new Error(data.error);
         setStatus('');
@@ -516,7 +531,7 @@
   }
 
   Promise.all([
-    fetch(API_BASE + '?meta=1').then(function (r) { return r.json(); }),
+    fetchJson_(API_BASE + '?meta=1', 3, 2000),
     fetchCurrentGameweekNumber()
   ])
     .then(function (results) {
