@@ -529,8 +529,15 @@
       select.disabled = false;
       select.addEventListener('change', function () { loadJournee(select.value); });
 
-      var defaultJournee = currentNumber != null ? 'Journée ' + currentNumber : null;
-      if (!defaultJournee || journees.indexOf(defaultJournee) === -1) {
+      // 'Compos' is free text a teammate fills in by hand -- observed to be
+      // just "1", "2", ... this season rather than "Journée N" (same
+      // tolerance as apps-script/Code.gs's gameweekNumberFromJournee_) -- so
+      // match by extracted number, not by rebuilding a "Journée N" string
+      // that would never equal a bare "3" and always fall through below.
+      var defaultJournee = currentNumber != null
+        ? journees.filter(function (j) { return parseInt(String(j).match(/\d+/), 10) === currentNumber; })[0]
+        : null;
+      if (!defaultJournee) {
         defaultJournee = journees.length ? journees[0] : null;
       }
       if (defaultJournee) {
