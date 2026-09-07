@@ -263,8 +263,9 @@
     flex: none;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
   }
-  /* Bottom-right corner of the shirt. The bottom-left corner is left free
-     for a future captain badge, so a player with both isn't a redesign. */
+  /* Bottom-right corner (the hem) of the shirt — the captain armband sits
+     on the opposite corner (the sleeve, top-left), so a player with both
+     never has the badges collide. */
   .penalty-badge {
     position: absolute;
     right: -0.2rem;
@@ -272,6 +273,22 @@
     width: 0.95rem;
     height: auto;
     filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+  }
+  /* Captain armband, worn on the sleeve (the shirt's top-left corner in
+     SHIRT_PATH). The icon is a black silhouette with no shirt-color-aware
+     styling of its own, so it gets a small white backing here — the same
+     reason the shirt itself is drawn with a white stroke — to stay visible
+     against dark kits (navy, black, purple, ...). */
+  .captain-badge {
+    position: absolute;
+    left: -0.25rem;
+    top: -0.1rem;
+    width: 0.9rem;
+    height: auto;
+    background: #ffffff;
+    border-radius: 2px;
+    padding: 0.03rem;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
   }
   .player-label {
     color: #ffffff;
@@ -448,12 +465,14 @@
     return svg;
   }
 
-  // Small boot-and-ball badge for the designated penalty taker, cropped to
-  // a transparent background (the source icon shipped with an opaque black
-  // background baked into the JPEG) and embedded inline so there's no
-  // extra asset file/license to track, matching how the shirt itself is
-  // drawn from inline primitives rather than a traced image.
+  // Small badges for on-shirt markers (penalty taker, captain), embedded
+  // inline so there's no extra asset file/license to track, matching how
+  // the shirt itself is drawn from inline primitives rather than a traced
+  // image. Both source icons shipped with an opaque background baked into
+  // the JPEG (black for the penalty icon, white for the captain armband)
+  // and were cropped to transparent before embedding.
   var PENALTY_BADGE_SRC = 'data:image/png;base64,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';
+  var CAPTAIN_BADGE_SRC = 'data:image/png;base64,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';
 
   function teamInitials(equipe) {
     return String(equipe || '?')
@@ -472,22 +491,29 @@
     return parts;
   }
 
-  // A standalone "(P)"/"(p)" bracket marks the designated penalty taker —
-  // distinct from the "Surname (Real Name)" disambiguation bracket (see
-  // Code.gs's nameCandidates_), which never contains just that one letter.
-  // Strips the marker out for display and reports it separately so the
-  // caller can badge the shirt instead of showing "(P)" as if it were part
-  // of the name.
+  // A standalone "(P)"/"(p)" or "(C)"/"(c)" bracket marks the penalty
+  // taker or captain — distinct from the "Surname (Real Name)"
+  // disambiguation bracket (see Code.gs's nameCandidates_), which never
+  // contains just one of those two letters. Strips the marker(s) out for
+  // display and reports them separately so the caller can badge the shirt
+  // instead of showing "(P)"/"(C)" as if they were part of the name. Both
+  // can be present on the same player (e.g. "Mbappé (P) (C)").
   function parsePlayerName(rawName) {
     var isPenalty = false;
+    var isCaptain = false;
     var displayName = String(rawName || '').replace(/\(([^)]*)\)/g, function (match, inner) {
-      if (/^p$/i.test(inner.trim())) {
+      var trimmed = inner.trim();
+      if (/^p$/i.test(trimmed)) {
         isPenalty = true;
+        return '';
+      }
+      if (/^c$/i.test(trimmed)) {
+        isCaptain = true;
         return '';
       }
       return match;
     }).replace(/\s+/g, ' ').trim();
-    return { displayName: displayName, isPenalty: isPenalty };
+    return { displayName: displayName, isPenalty: isPenalty, isCaptain: isCaptain };
   }
 
   function renderLine(names, color) {
@@ -500,6 +526,13 @@
       var chip = el('div', { class: 'player-chip' });
       var shirtWrap = el('div', { class: 'player-shirt-wrap' });
       shirtWrap.appendChild(shirtIcon(color));
+      if (parsed.isCaptain) {
+        shirtWrap.appendChild(el('img', {
+          class: 'captain-badge',
+          src: CAPTAIN_BADGE_SRC,
+          alt: 'Capitaine'
+        }));
+      }
       if (parsed.isPenalty) {
         shirtWrap.appendChild(el('img', {
           class: 'penalty-badge',
