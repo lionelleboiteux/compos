@@ -75,6 +75,51 @@ When the code changes later, redeploy via **Manage deployments > edit the
 active deployment > New version > Deploy** — always replacing the whole
 file first, for the same reason as step 2.
 
+### Updating the Apps Script with clasp
+
+This repo's `apps-script/.clasp.json` (gitignored, not committed) already
+points at the live project (script ID
+`13XmRy9T75b6K4s6sbpYZmNPW6TrplyNarQpMDcCd7a2RJb7P60bPYH66`), so after
+editing `Code.gs` or `appsscript.json` you can push and redeploy straight
+from the command line instead of copy-pasting into the Apps Script editor —
+same pattern as the sibling [`DNP`](../DNP) project:
+
+```
+npm i -g @google/clasp
+clasp login                                # once per machine/account
+cd apps-script
+clasp push                                 # uploads Code.gs + appsscript.json
+clasp deployments                          # find the deployment ID matching
+                                            # the /exec URL in frontend/index.html
+clasp deploy -i <deploymentId>             # points the live Web App at the
+                                            # version just pushed
+```
+
+Gotchas (see DNP's README for the full writeup — same clasp setup, same
+failure modes):
+
+- **`clasp login` needs its own account authorization.** If you're not
+  already logged in as an account with edit access to the sheet, run
+  `clasp logout` first, then `clasp login` again to switch accounts.
+- **"User has not enabled the Apps Script API"** on push/deploy: the
+  logged-in account needs to enable it once at
+  https://script.google.com/home/usersettings.
+- **`clasp push` skips manifest changes by default** — pass `clasp push
+  --force` if `appsscript.json` itself changed, otherwise the live
+  manifest silently keeps its old values even though `Code.gs` updates
+  fine.
+- **The big one**: `appsscript.json`'s `"executeAs": "USER_DEPLOYING"`
+  means the Web App runs under whichever Google account most recently
+  created or updated *that specific deployment*. If you `clasp deploy`
+  with a different account than before, and that account has never been
+  through Google's interactive OAuth consent for this script (Sheets
+  access, etc.), every request to the public `/exec` URL will start
+  failing with a Drive "You need access" 403 page — for **any** version,
+  including a rollback, since the problem is the identity, not the code.
+  Fix: open the project in the Apps Script editor as that account and run
+  any function once (e.g. select `doGet`, click Run) to trigger and accept
+  the authorization prompt, then redeploy.
+
 ### 2b. (Optional) Enable actual-composition tracking
 
 Separately from the Web App deployment above, `Code.gs` can also record the
