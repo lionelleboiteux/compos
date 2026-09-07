@@ -239,14 +239,14 @@
     flex-direction: column;
     align-items: center;
     gap: 0.2rem;
-    /* Fixed width, not content-based: a chip with a long/wrapping label
-       (e.g. "Rabillard (Colas)") must not be visually wider than a chip
-       with a short one, or the shirts stop being evenly spaced relative to
-       each other even though the row as a whole is still centered.
-       flex-shrink allowed as a safety net on very narrow screens. */
-    flex: 0 1 3.4rem;
-    min-width: 0;
-    width: 3.4rem;
+    /* Width follows the label instead of a fixed 3.4rem: a long label like
+       "Sahraoui (Onal)" needs the extra room to stay on one line, and
+       letting the chip grow to fit it (rather than wrapping/truncating)
+       reads better than keeping every chip the same width. The row is
+       still centered as a whole via justify-content on .pitch-line, so
+       uneven chip widths don't unbalance the layout. */
+    flex: 0 1 auto;
+    min-width: 3.4rem;
   }
   .player-shirt {
     width: 1.9rem;
@@ -260,7 +260,7 @@
     font-weight: 600;
     text-align: center;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-    overflow-wrap: anywhere;
+    white-space: nowrap;
   }
   .empty-state, .error-state {
     text-align: center;
