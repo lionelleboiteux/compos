@@ -810,11 +810,30 @@
       // tolerance as apps-script/Code.gs's gameweekNumberFromJournee_) -- so
       // match by extracted number, not by rebuilding a "Journée N" string
       // that would never equal a bare "3" and always fall through below.
-      var defaultJournee = currentNumber != null
-        ? journees.filter(function (j) { return parseInt(String(j).match(/\d+/), 10) === currentNumber; })[0]
-        : null;
+      //
+      // currentNumber is the *upcoming* gameweek per the pronos API (it
+      // flips before that gameweek's Compos row has been filled in), so an
+      // exact match is the uncommon case, not the rule: most of the time
+      // the highest journée that's <= currentNumber is what should show,
+      // and the page then jumps to currentNumber itself on its own, with
+      // no code change, the moment that row gets added to the sheet.
+      var numberedJournees = journees
+        .map(function (j) { return { journee: j, number: parseInt(String(j).match(/\d+/), 10) }; })
+        .filter(function (x) { return !isNaN(x.number); });
+      var defaultJournee = null;
+      if (currentNumber != null) {
+        var eligible = numberedJournees.filter(function (x) { return x.number <= currentNumber; });
+        eligible.sort(function (a, b) { return b.number - a.number; });
+        if (eligible.length) defaultJournee = eligible[0].journee;
+      }
       if (!defaultJournee) {
-        defaultJournee = journees.length ? journees[0] : null;
+        // No usable currentNumber, or every available journée is somehow
+        // ahead of it -- show the highest-numbered one rather than journée
+        // 1. (orderedJourneeList_ on the Apps Script side returns sheet
+        // row order, not necessarily numeric order, so pick explicitly
+        // rather than assuming the last entry is the latest.)
+        var highest = numberedJournees.slice().sort(function (a, b) { return b.number - a.number; })[0];
+        defaultJournee = highest ? highest.journee : (journees.length ? journees[0] : null);
       }
       if (defaultJournee) {
         select.value = defaultJournee;
