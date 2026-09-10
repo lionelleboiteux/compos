@@ -19,11 +19,23 @@ Google Sheet (private)
       |
       v
 Apps Script Web App (apps-script/Code.gs)   <-- runs as the sheet owner/editor
+      ^                                  \
+      | live fetch on cache miss          | POST /__revalidate on edit
+      |                                    v
+Cloudflare Worker + KV (worker/) <---------
       |
       | JSON (only equipe/formation/joueurs — never the raw sheet)
       v
 frontend/index.html (static, GitHub Pages, l1.compos.fantasy-coach.fr)
 ```
+
+The Worker is a caching reverse proxy in front of the Apps Script API — see
+[Cloudflare Worker cache](#cloudflare-worker-cache-edge-caching-in-front-of-the-apps-script-api)
+below. It exists because Apps Script's own container spins down when idle
+(a cold request can hang 10-40s), so ordinary visits go through the Worker's
+Cloudflare KV cache instead of hitting Apps Script directly; the Sheet's own
+edit hooks push fresh data into that cache proactively, so nobody pays the
+cold-start cost.
 
 ## Setup
 
@@ -120,6 +132,82 @@ failure modes):
   any function once (e.g. select `doGet`, click Run) to trigger and accept
   the authorization prompt, then redeploy.
 
+### Cloudflare Worker cache (edge caching in front of the Apps Script API)
+
+`worker/` is a small Cloudflare Worker that caches the Apps Script JSON API
+(`?meta=1` and `?journee=...`) in Workers KV, so an ordinary visit never has
+to wait on Apps Script's cold start (10-40s after the container's been idle).
+The frontend fetches from the Worker instead of Apps Script directly; the
+Sheet's own edit hooks (`onEditCacheWebhook_`, `recordActualCompos_`,
+`refreshFixtures` in `Code.gs`) push the affected journée straight into the
+Worker's cache the moment something changes, rather than waiting for the
+next visitor to trigger a lazy re-fetch.
+
+Setup (once):
+
+```bash
+cd worker
+npm install
+wrangler login                          # if not already logged in
+wrangler kv namespace create CACHE      # paste the printed id into wrangler.jsonc's kv_namespaces[0].id
+wrangler secret put REVALIDATE_SECRET   # pick a random long string
+wrangler deploy
+```
+
+Then, one-time, populate the cache for every journée that already has data:
+
+```bash
+curl -X POST "https://<your-worker>.workers.dev/__warm-all?secret=<REVALIDATE_SECRET>"
+```
+
+And wire up the Apps Script side so edits actually reach the Worker — in the
+Apps Script editor:
+
+1. **Project Settings > Script Properties > Add script property**, twice:
+   - `CACHE_WEBHOOK_URL` = `https://<your-worker>.workers.dev/__revalidate`
+   - `CACHE_WEBHOOK_SECRET` = the exact same value passed to `wrangler secret put` above
+2. In the function dropdown, select `setupCacheWebhookTrigger` and click
+   **Run** once (grant the requested permissions — it needs to manage
+   triggers). This installs an **installable** onEdit trigger specifically
+   for the webhook call; re-running later is safe, same pattern as
+   `setupGameweekTrigger`/`setupFixturesTrigger`.
+
+Gotchas:
+
+- **Why an installable trigger, not just `onEdit(e)`**: Apps Script's
+  simple triggers (the plain global `onEdit(e)` function) are barred by the
+  platform from calling any service that requires authorization —
+  `UrlFetchApp` included — even once the script already has that scope.
+  This fails **completely silently** (no error surfaced anywhere) if you
+  try it anyway, which is exactly what happened building this the first
+  time: the simple trigger's `bumpCacheVersion_()` call kept working (no
+  authorization needed), but the webhook POST never left Apps Script at
+  all. `onEditCacheWebhook_` + `setupCacheWebhookTrigger` is the fix —
+  installable triggers run with full authorization.
+- **`CACHE_WEBHOOK_URL`/`CACHE_WEBHOOK_SECRET` must match the Worker's
+  `REVALIDATE_SECRET` exactly**, or every revalidation call 401s — silently
+  from the sheet editor's point of view (`notifyCacheWebhook_` swallows the
+  failure so a misconfigured webhook never blocks editing), visible only in
+  the Apps Script editor's **Executions** log or via `wrangler tail`.
+- **The Worker's revalidation re-fetch runs inside `ctx.waitUntil`, which
+  Cloudflare hard-caps at 30 seconds total** for the whole invocation
+  (shared across every target being revalidated). A cold Apps Script hit
+  alone can take up to 40s — past that ceiling — so the revalidate path
+  uses a single, shorter, un-retried attempt per target, run in parallel
+  across targets, to fit the common case (an edit's own journée + `meta`)
+  safely inside the budget; anything that still misses the window just
+  leaves the previous (stale but valid) KV entry in place until the next
+  successful edit corrects it.
+- **KV writes can take up to ~60s to propagate** to Cloudflare edge
+  locations other than the one that handled the revalidation webhook — an
+  accepted, low-impact limitation, not something worth engineering around
+  at this project's traffic scale.
+- Re-run `/__warm-all` any time the KV namespace is recreated, or after a
+  long period with the Worker undeployed.
+- No automated CI deploy for the Worker (unlike the frontend's `pages.yml`)
+  — `wrangler deploy` from `worker/` is manual, matching how Apps Script
+  deploys are also manual via `clasp` in this repo.
+
 ### 2b. (Optional) Enable actual-composition tracking
 
 Separately from the Web App deployment above, `Code.gs` can also record the
@@ -143,9 +231,15 @@ touches the "Compos" tab.
 
 ### 3. Point the frontend at the Web App
 
-Edit `frontend/index.html`, replace `REPLACE_WITH_APPS_SCRIPT_WEB_APP_URL`
-with the Web App URL from step 2.4. (For local testing without editing the
-file, append `?api=<url>` to the page's own URL instead.)
+Edit `frontend/index.html`'s `API_BASE` default (currently the Cloudflare
+Worker's `workers.dev` URL — see [Cloudflare Worker
+cache](#cloudflare-worker-cache-edge-caching-in-front-of-the-apps-script-api)
+above) to point at your own Worker deployment. Apps Script's `/exec` URL
+from step 2.4 is only used internally by the Worker (`APPS_SCRIPT_BASE` in
+`worker/wrangler.jsonc`) and directly via `?api=<apps-script-url>` for
+debugging. (For local testing without editing the file, append
+`?api=<url>` to the page's own URL instead — same override, works against
+either the Worker or Apps Script directly.)
 
 ### 4. Host it
 

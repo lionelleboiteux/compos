@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "compos-l1-cache",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-08",
+  "observability": { "enabled": true },
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "2e8bedbee42c4b93a813533f0de24a7a" }
+  ],
+  "vars": {
+    // Not a secret -- this exact URL is already public, embedded in
+    // frontend/index.html today. Kept as a var (not a secret) so it's
+    // visible/diffable in version control like everything else here.
+    "APPS_SCRIPT_BASE": "https://script.google.com/macros/s/AKfycby7k1DeAKMJFeSLMCHtQntyU0hGseKmN4ZMxuMMDjugFTh-H4wTNvk5TA32CM5By7aMng/exec"
+  }
+}

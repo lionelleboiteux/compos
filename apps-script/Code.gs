@@ -304,9 +304,48 @@ function normalizeBase_(name) {
  * installable-trigger setup needed. Bumping the version stamp changes every
  * cache key derived from it, which invalidates the whole cache in one write
  * without needing to know which keys currently exist.
+ *
+ * Deliberately does NOT also call notifyCacheWebhook_ here: simple triggers
+ * (this function) are barred by the platform from calling any service that
+ * requires authorization — UrlFetchApp included — even if the script
+ * already has that scope (confirmed against Apps Script's own docs on
+ * simple-trigger restrictions; a first attempt at calling the webhook
+ * straight from here failed completely silently, since notifyCacheWebhook_
+ * swallows the resulting exception). See onEditCacheWebhook_/
+ * setupCacheWebhookTrigger below for the installable-trigger counterpart
+ * that actually can make the call.
  */
 function onEdit(e) {
   bumpCacheVersion_();
+}
+
+/**
+ * Installable-trigger counterpart to onEdit above, registered by
+ * setupCacheWebhookTrigger — unlike a simple trigger, this runs with full
+ * authorization and can call UrlFetchApp (via notifyCacheWebhook_) to push
+ * the affected journée(s) to the Cloudflare Worker cache (see
+ * worker/src/index.js), targeted via targetedJourneesFromEdit_ when
+ * possible rather than a blanket everything-changed signal.
+ */
+function onEditCacheWebhook_(e) {
+  var journees = targetedJourneesFromEdit_(e);
+  notifyCacheWebhook_(journees === null ? allKnownJournees_() : journees);
+}
+
+/**
+ * One-time setup: run this once from the Apps Script editor (select it in
+ * the function dropdown, click Run, grant the requested permissions) to
+ * install the installable onEdit trigger above. Re-running is safe — it
+ * removes any trigger it previously installed for onEditCacheWebhook_
+ * before adding a new one, so this never stacks up duplicate triggers.
+ * Same pattern as setupGameweekTrigger/setupFixturesTrigger elsewhere in
+ * this file.
+ */
+function setupCacheWebhookTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onEditCacheWebhook_') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('onEditCacheWebhook_').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
 }
 
 /**
@@ -318,6 +357,98 @@ function onEdit(e) {
  */
 function bumpCacheVersion_() {
   PropertiesService.getScriptProperties().setProperty('cacheVersion', String(Date.now()));
+}
+
+// --- Cloudflare Worker cache webhook -------------------------------------
+//
+// Separate from (and in addition to) this script's own CacheService/
+// cacheVersion mechanism above: worker/src/index.js keeps its own KV-backed
+// copy of doGet's responses so visitors get an instant edge hit instead of
+// waiting on this script's cold start. This notifies it when data changes
+// so it can proactively re-fetch and re-cache -- both the "flush" and the
+// "pre-load" of that edge cache -- rather than only lazily filling in on
+// the next visitor's request.
+
+/**
+ * POSTs to the Worker's /__revalidate endpoint with the journée(s) that
+ * changed. CACHE_WEBHOOK_URL/CACHE_WEBHOOK_SECRET are Script Properties
+ * (Project Settings > Script Properties in the editor -- never committed
+ * here, and clasp has no CLI for setting them). Silently no-ops if either
+ * is unset, so this feature is safe to leave unconfigured. Wrapped in
+ * try/catch so a Worker outage/timeout never surfaces as an error to
+ * whoever is editing the sheet, or breaks the caller's own logic -- worst
+ * case is a stale edge cache entry until the next successful call.
+ */
+function notifyCacheWebhook_(journees) {
+  var props = PropertiesService.getScriptProperties();
+  var url = props.getProperty('CACHE_WEBHOOK_URL');
+  var secret = props.getProperty('CACHE_WEBHOOK_SECRET');
+  if (!url || !secret || !journees || !journees.length) return;
+
+  try {
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'X-Revalidate-Secret': secret },
+      payload: JSON.stringify({ journees: journees }),
+      muteHttpExceptions: true
+    });
+  } catch (err) {
+    console.error('notifyCacheWebhook_ failed', err);
+  }
+}
+
+// Safety-net list of every journée the Worker should revalidate when a
+// targeted one can't be determined from the edit event -- built from the
+// same source doGet's own ?meta=1 response uses, so it never drifts from
+// what's actually in the sheet.
+function allKnownJournees_() {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
+  return orderedJourneeList_(readRows_(sheet));
+}
+
+// Maps a gameweek NUMBER (as used internally by recordActualCompos_/
+// refreshFixtures, both of which work in terms of ligue1.com's numeric
+// gameweeks) back to the exact journée STRING as it appears in the
+// 'Compos' sheet (observed to be a bare number like "3" this season, not
+// "Journée 3" -- the two tabs don't share a spelling convention, see
+// gameweekNumberFromJournee_ above). This is what doGet's cache key, and
+// therefore the Worker's KV key, actually key on -- revalidation must
+// target this string, not the "Journée N" form used elsewhere in this
+// file, or it silently revalidates a KV key nothing ever reads. Returns
+// null if no 'Compos' row exists yet for that gameweek.
+function journeeStringForGameweek_(gameweekNumber) {
+  var match = null;
+  allKnownJournees_().forEach(function (j) {
+    if (gameweekNumberFromJournee_(j) === gameweekNumber) match = j;
+  });
+  return match;
+}
+
+// Returns the distinct Journée values (column A) touched by this edit
+// event, if `e` is a real edit on the 'Compos' sheet -- handles multi-row
+// edits (e.g. pasting several rows at once fires ONE onEdit call, not one
+// per cell) by scanning the whole edited range, not just its first row.
+// Returns null when a targeted list can't be determined at all (edit on a
+// different tab, or `e`/`e.range` missing -- can happen for some edit
+// types) so the caller knows to fall back to allKnownJournees_().
+function targetedJourneesFromEdit_(e) {
+  if (!e || !e.range) return null;
+  var sheet = e.range.getSheet();
+  if (!sheet || sheet.getName() !== SHEET_NAME) return null;
+
+  var lastRow = e.range.getLastRow();
+  if (lastRow < FIRST_DATA_ROW) return []; // header-row-only edit, nothing to revalidate
+
+  var startRow = Math.max(e.range.getRow(), FIRST_DATA_ROW);
+  var values = sheet.getRange(startRow, COL_JOURNEE, lastRow - startRow + 1, 1).getValues();
+  var seen = {};
+  var journees = [];
+  values.forEach(function (r) {
+    var j = String(r[0] || '').trim();
+    if (j && !seen[j]) { seen[j] = true; journees.push(j); }
+  });
+  return journees;
 }
 
 function getCacheVersion_() {
@@ -404,26 +535,48 @@ function jsonResponse_(json) {
 
 /**
  * Fetches the current Ligue 1 gameweek number from the same jeu-des-pronos
- * endpoint the frontend uses, and — if it has advanced since the last time
- * this ran — records the actual (post-match) compositions for every
- * gameweek in between into the 'actuelles' tab.
+ * endpoint the frontend uses, and records the actual (post-match)
+ * compositions for every finished gameweek not yet present in 'actuelles'.
  *
  * Meant to be run on an installable time-driven trigger (see
  * setupGameweekTrigger below); onEdit-style simple triggers can't do this
  * since it needs UrlFetchApp and takes longer than a simple trigger allows.
  * Safe to run more often than the gameweek actually changes — recordActualCompos_
  * skips any (journée, équipe) pair already present, so re-runs are harmless.
+ *
+ * Derives "what's already recorded" from the 'actuelles' tab itself
+ * (latestRecordedGameweek_) rather than a separate stored cursor: an
+ * earlier version tracked a PropertiesService 'lastSeenGameweek' cursor
+ * and stamped it to `current` (the *upcoming*, not-yet-playable gameweek)
+ * instead of `current - 1` (the gameweek that had actually just finished
+ * and was eligible to record) — since `current` advances one gameweek at
+ * a time between runs in steady state, that stamp always landed one
+ * gameweek ahead of what got recorded, so every run's loop start
+ * (lastSeen + 1) already equaled `current`, the loop body never executed,
+ * and the most-recently-finished gameweek was silently skipped forever.
+ * Reading the real gap from the sheet instead is immune to that whole bug
+ * class and self-heals any gap regardless of how it was caused.
  */
 function checkGameweekTransition() {
-  var props = PropertiesService.getScriptProperties();
-  var lastSeen = parseInt(props.getProperty('lastSeenGameweek'), 10) || 0;
   var current = fetchCurrentGameweekNumber_();
-  if (!current || current <= lastSeen) return;
+  if (!current) return;
 
-  for (var gw = lastSeen + 1; gw < current; gw++) {
+  for (var gw = latestRecordedGameweek_() + 1; gw <= current - 1; gw++) {
     recordActualCompos_(gw);
   }
-  props.setProperty('lastSeenGameweek', String(current));
+}
+
+// Highest gameweek number already present in 'actuelles', or 0 if the tab
+// doesn't exist yet or has no rows.
+function latestRecordedGameweek_() {
+  var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME_RESULTS);
+  if (!sheet) return 0;
+  var max = 0;
+  readRows_(sheet).forEach(function (r) {
+    var n = gameweekNumberFromJournee_(r.journee);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return max;
 }
 
 function fetchCurrentGameweekNumber_() {
@@ -467,8 +620,14 @@ function recordActualCompos_(gameweekNumber) {
 
   // appendRow() is script-driven, so onEdit's simple trigger won't fire for
   // it -- bump the cache ourselves so newly-recorded scores show up on the
-  // next request instead of waiting out the existing 6h TTL.
-  if (wroteAny) bumpCacheVersion_();
+  // next request instead of waiting out the existing 6h TTL, and revalidate
+  // this gameweek's Worker/KV entry too (see journeeStringForGameweek_ for
+  // why this isn't simply `journee`).
+  if (wroteAny) {
+    bumpCacheVersion_();
+    var composJournee = journeeStringForGameweek_(gameweekNumber);
+    if (composJournee) notifyCacheWebhook_([composJournee]);
+  }
 }
 
 function getOrCreateResultsSheet_() {
@@ -709,6 +868,7 @@ function refreshFixtures() {
   var byGw = readAllFixtureRows_(sheet);
   var current = fetchCurrentGameweekNumber_();
   var changed = false;
+  var changedGameweeks = [];
 
   for (var gw = 1; gw <= SEASON_GAMEWEEKS; gw++) {
     var inWindow = current != null && gw >= current && gw <= current + FIXTURES_REFRESH_LOOKAHEAD;
@@ -719,6 +879,7 @@ function refreshFixtures() {
     if (fresh.length) {
       byGw[gw] = fresh;
       changed = true;
+      changedGameweeks.push(gw);
     }
   }
 
@@ -737,6 +898,16 @@ function refreshFixtures() {
   }
 
   bumpCacheVersion_();
+
+  // A fixture is embedded per-team in that team's journée payload (see
+  // journeePayload_), so a fixture change for gameweek N invalidates
+  // exactly that journée's cache entry -- same per-journée granularity as
+  // doGet's own cache key. See journeeStringForGameweek_ for why this
+  // isn't simply 'Journée ' + gw.
+  var composJournees = changedGameweeks
+    .map(journeeStringForGameweek_)
+    .filter(function (j) { return j; });
+  notifyCacheWebhook_(composJournees);
 }
 
 /**
