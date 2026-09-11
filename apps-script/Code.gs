@@ -134,6 +134,19 @@ var API_TEAM_NAME_MAP = {
 // somehow doesn't trigger onEdit below.
 var CACHE_TTL_SECONDS = 21600;
 
+// Bump whenever doGet's *response shape* changes (a field added/removed/
+// renamed) -- distinct from cacheVersion (which tracks *data* changes via
+// bumpCacheVersion_ on every edit). A code deploy alone doesn't touch
+// cacheVersion, so a journée whose cache entry happened to still be warm
+// from before the deploy would otherwise keep serving the old shape for up
+// to CACHE_TTL_SECONDS regardless of any code change -- observed directly
+// 2026-09-11, when adding `lastUpdated` left journée 4's still-warm
+// pre-deploy entry (nobody had edited it) serving a response with no
+// lastUpdated field at all, while other journées happened to have already
+// expired/recomputed. Bumping this forces every entry to recompute on the
+// next request after a shape change, independent of edits.
+var CACHE_SCHEMA_VERSION = 2;
+
 function doGet(e) {
   var journee = e.parameter.journee;
   var cacheKey = journee ? 'journee:' + journee : 'meta';
@@ -474,11 +487,11 @@ function lastUpdatedIso_() {
 }
 
 function cacheGet_(key) {
-  return CacheService.getScriptCache().get('v' + getCacheVersion_() + ':' + key);
+  return CacheService.getScriptCache().get('s' + CACHE_SCHEMA_VERSION + ':v' + getCacheVersion_() + ':' + key);
 }
 
 function cacheSet_(key, value) {
-  CacheService.getScriptCache().put('v' + getCacheVersion_() + ':' + key, value, CACHE_TTL_SECONDS);
+  CacheService.getScriptCache().put('s' + CACHE_SCHEMA_VERSION + ':v' + getCacheVersion_() + ':' + key, value, CACHE_TTL_SECONDS);
 }
 
 /**
