@@ -29,7 +29,8 @@
  *                                        score: { correct, total } | null,
  *                                        fixture: { opponent, isHome,
  *                                                   kickoff } | null }],
- *                            score: { correct, total, percent } | null
+ *                            score: { correct, total, percent } | null,
+ *                            lastUpdated: ISO datetime | null
  *                          }
  *                          Each team's `score` is how many of its 11
  *                          probable names appear (order-independent) among
@@ -49,7 +50,10 @@
  *                          is this project's short Équipe name (see
  *                          API_TEAM_NAME_MAP). null when the gameweek
  *                          number can't be resolved or nothing has been
- *                          cached for it yet.
+ *                          cached for it yet. `lastUpdated` is when
+ *                          bumpCacheVersion_ last ran (any edit to
+ *                          "Compos", a recorded actual compo, or a
+ *                          fixtures refresh) — see lastUpdatedIso_.
  *
  * Responses are cached in CacheService (script-wide, up to 6h) and
  * invalidated by bumping a version stamp in PropertiesService whenever the
@@ -210,7 +214,8 @@ function journeePayload_(composRows, journee) {
     equipes: equipes,
     score: totalPossible > 0
       ? { correct: totalCorrect, total: totalPossible, percent: Math.round(totalCorrect / totalPossible * 100) }
-      : null
+      : null,
+    lastUpdated: lastUpdatedIso_()
   };
 }
 
@@ -454,6 +459,18 @@ function targetedJourneesFromEdit_(e) {
 function getCacheVersion_() {
   var v = PropertiesService.getScriptProperties().getProperty('cacheVersion');
   return v || '0';
+}
+
+// ISO timestamp of the last time bumpCacheVersion_ ran (any 'Compos' edit,
+// recorded actual compo, or fixtures refresh) -- reusing cacheVersion's own
+// millisecond stamp rather than something like DriveApp's file-modified
+// time, which would need a new OAuth scope this project has never
+// requested and could break the deployed web app until re-authorized (see
+// README's "executeAs: USER_DEPLOYING" gotcha for the same class of
+// problem). null before the very first edit this script has ever seen.
+function lastUpdatedIso_() {
+  var v = parseInt(getCacheVersion_(), 10);
+  return v ? new Date(v).toISOString() : null;
 }
 
 function cacheGet_(key) {

@@ -86,6 +86,20 @@
     line-height: 1;
   }
   .status-line { color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0 1rem; }
+  /* Freshness indicator for the currently-loaded journée's data (see
+     Code.gs's lastUpdatedIso_) — the label stays modest, the timestamp
+     itself is the part worth noticing so it's set apart in size/weight. */
+  .last-updated {
+    margin: 0 0 1.25rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .last-updated-time {
+    margin-left: 0.4rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
   /* Explains the two on-shirt badges (see .penalty-badge/.captain-badge)
      once, above the results, rather than repeating a label on every shirt. */
   .badge-legend {
@@ -366,6 +380,8 @@
     </div>
   </div>
 
+  <p id="last-updated" class="last-updated"></p>
+
   <div id="badge-legend" class="badge-legend"></div>
 
   <p id="status-line" class="status-line"></p>
@@ -396,6 +412,7 @@
   var statusLine = document.getElementById('status-line');
   var teamGrid = document.getElementById('team-grid');
   var gameweekScoreEl = document.getElementById('gameweek-score');
+  var lastUpdatedEl = document.getElementById('last-updated');
 
   function el(tag, attrs, children) {
     var e = document.createElement(tag);
@@ -767,16 +784,41 @@
     gameweekScoreEl.textContent = score ? score.percent + '%' : '';
   }
 
+  // ISO datetime -> "dd/mm  HH:mm" in Europe/Paris, same locale/timezone
+  // convention as renderFixtureLine_/dayGroupKey_ above. null (no edit
+  // recorded yet, or an unparseable value) clears the display entirely
+  // rather than showing a broken timestamp.
+  function formatLastUpdated_(iso) {
+    var d = iso ? new Date(iso) : null;
+    if (!d || isNaN(d.getTime())) return null;
+    var parts = {};
+    new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+    if (!parts.day || !parts.month || !parts.hour || !parts.minute) return null;
+    return parts.day + '/' + parts.month + '  ' + parts.hour + ':' + parts.minute;
+  }
+
+  function renderLastUpdated(iso) {
+    var formatted = formatLastUpdated_(iso);
+    lastUpdatedEl.innerHTML = '';
+    if (!formatted) return;
+    lastUpdatedEl.appendChild(el('span', { text: 'Dernière mise à jour :' }));
+    lastUpdatedEl.appendChild(el('span', { class: 'last-updated-time', text: formatted }));
+  }
+
   function loadJournee(journee) {
     setStatus('Chargement…');
     teamGrid.innerHTML = '';
     renderGameweekScore(null);
+    renderLastUpdated(null);
     fetchJson_(API_BASE + '?journee=' + encodeURIComponent(journee), 3, 2000)
       .then(function (data) {
         if (data && data.error) throw new Error(data.error);
         setStatus('');
         renderTeams(data.equipes);
         renderGameweekScore(data.score);
+        renderLastUpdated(data.lastUpdated);
       })
       .catch(function (err) {
         setStatus('');
