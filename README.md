@@ -137,11 +137,17 @@ failure modes):
 `worker/` is a small Cloudflare Worker that caches the Apps Script JSON API
 (`?meta=1` and `?journee=...`) in Workers KV, so an ordinary visit never has
 to wait on Apps Script's cold start (10-40s after the container's been idle).
-The frontend fetches from the Worker instead of Apps Script directly; the
-Sheet's own edit hooks (`onEditCacheWebhook_`, `recordActualCompos_`,
-`refreshFixtures` in `Code.gs`) push the affected journée straight into the
-Worker's cache the moment something changes, rather than waiting for the
-next visitor to trigger a lazy re-fetch.
+The frontend fetches from the Worker instead of Apps Script directly.
+`recordActualCompos_`/`refreshFixtures` in `Code.gs` still push their own
+(narrow, infrequent) revalidations into the Worker's cache automatically —
+see their gotcha below for why those stay automatic.
+
+Refreshing the Worker's cache after a manual **Sheet edit**, though, is a
+**manual** step: the Sheet has a "⚡ Cache" menu with a "Rafraîchir
+maintenant" item (`refreshCacheNow_`/`onOpen` in `Code.gs`) the maintainer
+clicks after finishing a batch of edits, rather than something that fires
+automatically on every edit. This is deliberate, not a missing feature —
+see the first gotcha below for why.
 
 Setup (once):
 
@@ -160,44 +166,56 @@ Then, one-time, populate the cache for every journée that already has data:
 curl -X POST "https://<your-worker>.workers.dev/__warm-all?secret=<REVALIDATE_SECRET>"
 ```
 
-And wire up the Apps Script side so edits actually reach the Worker — in the
-Apps Script editor:
+And wire up the Apps Script side so the menu can actually reach the Worker —
+in the Apps Script editor:
 
 1. **Project Settings > Script Properties > Add script property**, twice:
    - `CACHE_WEBHOOK_URL` = `https://<your-worker>.workers.dev/__revalidate`
    - `CACHE_WEBHOOK_SECRET` = the exact same value passed to `wrangler secret put` above
-2. In the function dropdown, select `setupCacheWebhookTrigger` and click
-   **Run** once (grant the requested permissions — it needs to manage
-   triggers). This installs an **installable** onEdit trigger specifically
-   for the webhook call; re-running later is safe, same pattern as
-   `setupGameweekTrigger`/`setupFixturesTrigger`.
+2. Reload the Sheet — the "⚡ Cache" menu (built by `onOpen`) appears
+   automatically, no setup function to run.
+3. If this project previously had the old *automatic* per-edit trigger
+   installed, run `removeCacheWebhookTrigger_` once from the function
+   dropdown to remove it — otherwise it keeps firing (harmlessly, since its
+   handler function no longer exists) on every edit.
 
 Gotchas:
 
-- **Why an installable trigger, not just `onEdit(e)`**: Apps Script's
-  simple triggers (the plain global `onEdit(e)` function) are barred by the
-  platform from calling any service that requires authorization —
-  `UrlFetchApp` included — even once the script already has that scope.
-  This fails **completely silently** (no error surfaced anywhere) if you
-  try it anyway, which is exactly what happened building this the first
-  time: the simple trigger's `bumpCacheVersion_()` call kept working (no
-  authorization needed), but the webhook POST never left Apps Script at
-  all. `onEditCacheWebhook_` + `setupCacheWebhookTrigger` is the fix —
-  installable triggers run with full authorization.
-- **`CACHE_WEBHOOK_URL`/`CACHE_WEBHOOK_SECRET` must match the Worker's
-  `REVALIDATE_SECRET` exactly**, or every revalidation call 401s — silently
-  from the sheet editor's point of view (`notifyCacheWebhook_` swallows the
-  failure so a misconfigured webhook never blocks editing), visible only in
-  the Apps Script editor's **Executions** log or via `wrangler tail`.
+- **Why this is a manual menu click, not automatic on every edit**:
+  Cloudflare's Workers KV free tier caps **1,000 "put" operations per day
+  for the whole account** — shared with the sibling
+  [`DNP`](../DNP) project's own Worker. This project's per-row targeting
+  (see the old `targetedJourneesFromEdit_`, since removed) usually kept an
+  automatic edit cheap — 1-2 puts — but a maintainer editing several rows
+  in one sitting still adds up, and a broad edit (a header row, a paste
+  spanning many journées, anything outside the 'Compos' tab) fell back to
+  revalidating all 34 journées + `meta` (35 puts) at once. Combined with
+  DNP's own automatic edits sharing the same account-wide quota, this blew
+  through the daily cap. One deliberate "Rafraîchir maintenant" click after
+  finishing a batch of edits always costs the same 35 puts, but only once
+  per session instead of once per edit — comfortably under the cap for
+  realistic usage.
+- **`notifyCacheWebhook_` returns `false` (and `refreshCacheNow_` shows a
+  failure alert) if `CACHE_WEBHOOK_URL` or `CACHE_WEBHOOK_SECRET` is
+  missing, empty, or misspelled**, or the Worker responds with anything
+  other than 2xx — this used to fail completely silently (visible only in
+  the Apps Script editor's Executions log or via `wrangler tail`) before
+  `notifyCacheWebhook_` returned a real success/failure signal; the UI
+  alert now surfaces exactly that class of problem immediately instead.
 - **The Worker's revalidation re-fetch runs inside `ctx.waitUntil`, which
   Cloudflare hard-caps at 30 seconds total** for the whole invocation
   (shared across every target being revalidated). A cold Apps Script hit
-  alone can take up to 40s — past that ceiling — so the revalidate path
-  uses a single, shorter, un-retried attempt per target, run in parallel
-  across targets, to fit the common case (an edit's own journée + `meta`)
-  safely inside the budget; anything that still misses the window just
-  leaves the previous (stale but valid) KV entry in place until the next
-  successful edit corrects it.
+  alone can take up to 40s, and every manual refresh now targets all 34
+  journées + `meta` at once, so the revalidate path uses a single,
+  un-retried, 25s-per-target attempt, run in parallel across targets to
+  fit the budget; anything that still misses the window just leaves the
+  previous (stale but valid) KV entry in place until the next click
+  corrects it.
+- **`recordActualCompos_`/`refreshFixtures`'s own revalidation calls stay
+  automatic** (unlike the manual menu above) — they're infrequent and
+  already narrowly targeted to just the journée(s) actually affected (see
+  `journeeStringForGameweek_`), so they're a minor, bounded contributor to
+  the daily put quota rather than the main risk.
 - **KV writes can take up to ~60s to propagate** to Cloudflare edge
   locations other than the one that handled the revalidation webhook — an
   accepted, low-impact limitation, not something worth engineering around

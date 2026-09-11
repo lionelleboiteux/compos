@@ -321,49 +321,12 @@ function normalizeBase_(name) {
  * Simple trigger — fires automatically on any edit to the bound sheet, no
  * installable-trigger setup needed. Bumping the version stamp changes every
  * cache key derived from it, which invalidates the whole cache in one write
- * without needing to know which keys currently exist.
- *
- * Deliberately does NOT also call notifyCacheWebhook_ here: simple triggers
- * (this function) are barred by the platform from calling any service that
- * requires authorization — UrlFetchApp included — even if the script
- * already has that scope (confirmed against Apps Script's own docs on
- * simple-trigger restrictions; a first attempt at calling the webhook
- * straight from here failed completely silently, since notifyCacheWebhook_
- * swallows the resulting exception). See onEditCacheWebhook_/
- * setupCacheWebhookTrigger below for the installable-trigger counterpart
- * that actually can make the call.
+ * without needing to know which keys currently exist. Deliberately does
+ * NOT also notify the Cloudflare Worker cache here — see the "⚡ Cache"
+ * menu section below for why that's a manual, not automatic, step.
  */
 function onEdit(e) {
   bumpCacheVersion_();
-}
-
-/**
- * Installable-trigger counterpart to onEdit above, registered by
- * setupCacheWebhookTrigger — unlike a simple trigger, this runs with full
- * authorization and can call UrlFetchApp (via notifyCacheWebhook_) to push
- * the affected journée(s) to the Cloudflare Worker cache (see
- * worker/src/index.js), targeted via targetedJourneesFromEdit_ when
- * possible rather than a blanket everything-changed signal.
- */
-function onEditCacheWebhook_(e) {
-  var journees = targetedJourneesFromEdit_(e);
-  notifyCacheWebhook_(journees === null ? allKnownJournees_() : journees);
-}
-
-/**
- * One-time setup: run this once from the Apps Script editor (select it in
- * the function dropdown, click Run, grant the requested permissions) to
- * install the installable onEdit trigger above. Re-running is safe — it
- * removes any trigger it previously installed for onEditCacheWebhook_
- * before adding a new one, so this never stacks up duplicate triggers.
- * Same pattern as setupGameweekTrigger/setupFixturesTrigger elsewhere in
- * this file.
- */
-function setupCacheWebhookTrigger() {
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'onEditCacheWebhook_') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('onEditCacheWebhook_').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
 }
 
 /**
@@ -383,43 +346,97 @@ function bumpCacheVersion_() {
 // cacheVersion mechanism above: worker/src/index.js keeps its own KV-backed
 // copy of doGet's responses so visitors get an instant edge hit instead of
 // waiting on this script's cold start. This notifies it when data changes
-// so it can proactively re-fetch and re-cache -- both the "flush" and the
-// "pre-load" of that edge cache -- rather than only lazily filling in on
-// the next visitor's request.
+// so it can proactively re-fetch and re-cache it.
+//
+// Deliberately MANUAL (a Sheet menu item), not automatic on every edit --
+// each revalidation costs one Workers KV "put" per journée it re-fetches.
+// Cloudflare's free tier caps Workers KV at 1,000 puts/day for the whole
+// account -- shared with the sibling DNP project's own Worker -- and a
+// maintainer editing several rows in one sitting can add up fast even at
+// ~2 puts/edit (this project's per-row targeting is usually cheap, unlike
+// DNP's, but still not free). One deliberate "refresh now" click after
+// finishing a batch of edits costs the same 35 puts (all 34 journées +
+// meta) regardless of how many edits preceded it, capping the total to
+// once per session instead of once per edit.
+
+/**
+ * Simple trigger — adds a "⚡ Cache" menu to the Sheet's UI on open, with
+ * a single "Rafraîchir maintenant" item wired to refreshCacheNow_ below.
+ * Building a menu itself needs no authorization (unlike onEdit, which is
+ * why this doesn't also try to auto-refresh on open) -- only actually
+ * clicking the item does, prompting for consent the first time.
+ */
+function onOpen(e) {
+  SpreadsheetApp.getUi()
+    .createMenu('⚡ Cache')
+    .addItem('Rafraîchir maintenant', 'refreshCacheNow_')
+    .addToUi();
+}
+
+/**
+ * Manual "push" for the Cloudflare Worker cache: revalidates every known
+ * journée + meta in one go (see notifyCacheWebhook_/allKnownJournees_) and
+ * reports success/failure via a UI alert. Run this from the "⚡ Cache" menu
+ * (see onOpen above) after finishing a batch of edits, not per edit.
+ */
+function refreshCacheNow_() {
+  var ui = SpreadsheetApp.getUi();
+  var ok = notifyCacheWebhook_(allKnownJournees_());
+  ui.alert(ok
+    ? 'Cache en cours de rafraîchissement (jusqu\'à ~30 secondes pour se propager).'
+    : 'Échec du rafraîchissement — vérifiez CACHE_WEBHOOK_URL / CACHE_WEBHOOK_SECRET ' +
+      'dans Project Settings > Script Properties, ou réessayez.');
+}
+
+/**
+ * One-time cleanup: run this once from the Apps Script editor to remove
+ * the old per-edit installable trigger from before the "⚡ Cache" menu
+ * replaced it (see the comment block above) — it would otherwise keep
+ * firing on every edit, pointing at a handler function that no longer
+ * exists. Safe to run even if that trigger was already removed (no-op).
+ */
+function removeCacheWebhookTrigger_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'onEditCacheWebhook_') ScriptApp.deleteTrigger(t);
+  });
+}
 
 /**
  * POSTs to the Worker's /__revalidate endpoint with the journée(s) that
  * changed. CACHE_WEBHOOK_URL/CACHE_WEBHOOK_SECRET are Script Properties
  * (Project Settings > Script Properties in the editor -- never committed
- * here, and clasp has no CLI for setting them). Silently no-ops if either
- * is unset, so this feature is safe to leave unconfigured. Wrapped in
- * try/catch so a Worker outage/timeout never surfaces as an error to
- * whoever is editing the sheet, or breaks the caller's own logic -- worst
- * case is a stale edge cache entry until the next successful call.
+ * here, and clasp has no CLI for setting them). Silently no-ops (returns
+ * false) if either is unset, so this feature is safe to leave
+ * unconfigured. Wrapped in try/catch so a Worker outage/timeout never
+ * surfaces as an uncaught error -- worst case is a stale edge cache entry
+ * until the next successful call. Returns true only on a confirmed 2xx
+ * response, so refreshCacheNow_ can report real success/failure rather
+ * than just "request sent."
  */
 function notifyCacheWebhook_(journees) {
   var props = PropertiesService.getScriptProperties();
   var url = props.getProperty('CACHE_WEBHOOK_URL');
   var secret = props.getProperty('CACHE_WEBHOOK_SECRET');
-  if (!url || !secret || !journees || !journees.length) return;
+  if (!url || !secret || !journees || !journees.length) return false;
 
   try {
-    UrlFetchApp.fetch(url, {
+    var resp = UrlFetchApp.fetch(url, {
       method: 'post',
       contentType: 'application/json',
       headers: { 'X-Revalidate-Secret': secret },
       payload: JSON.stringify({ journees: journees }),
       muteHttpExceptions: true
     });
+    return resp.getResponseCode() >= 200 && resp.getResponseCode() < 300;
   } catch (err) {
     console.error('notifyCacheWebhook_ failed', err);
+    return false;
   }
 }
 
-// Safety-net list of every journée the Worker should revalidate when a
-// targeted one can't be determined from the edit event -- built from the
-// same source doGet's own ?meta=1 response uses, so it never drifts from
-// what's actually in the sheet.
+// Every journée the Worker should revalidate -- built from the same source
+// doGet's own ?meta=1 response uses, so it never drifts from what's
+// actually in the sheet.
 function allKnownJournees_() {
   var sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_NAME);
   return orderedJourneeList_(readRows_(sheet));
@@ -441,32 +458,6 @@ function journeeStringForGameweek_(gameweekNumber) {
     if (gameweekNumberFromJournee_(j) === gameweekNumber) match = j;
   });
   return match;
-}
-
-// Returns the distinct Journée values (column A) touched by this edit
-// event, if `e` is a real edit on the 'Compos' sheet -- handles multi-row
-// edits (e.g. pasting several rows at once fires ONE onEdit call, not one
-// per cell) by scanning the whole edited range, not just its first row.
-// Returns null when a targeted list can't be determined at all (edit on a
-// different tab, or `e`/`e.range` missing -- can happen for some edit
-// types) so the caller knows to fall back to allKnownJournees_().
-function targetedJourneesFromEdit_(e) {
-  if (!e || !e.range) return null;
-  var sheet = e.range.getSheet();
-  if (!sheet || sheet.getName() !== SHEET_NAME) return null;
-
-  var lastRow = e.range.getLastRow();
-  if (lastRow < FIRST_DATA_ROW) return []; // header-row-only edit, nothing to revalidate
-
-  var startRow = Math.max(e.range.getRow(), FIRST_DATA_ROW);
-  var values = sheet.getRange(startRow, COL_JOURNEE, lastRow - startRow + 1, 1).getValues();
-  var seen = {};
-  var journees = [];
-  values.forEach(function (r) {
-    var j = String(r[0] || '').trim();
-    if (j && !seen[j]) { seen[j] = true; journees.push(j); }
-  });
-  return journees;
 }
 
 function getCacheVersion_() {
