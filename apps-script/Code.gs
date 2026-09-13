@@ -1024,3 +1024,114 @@ function setupFixturesTrigger() {
   });
   ScriptApp.newTrigger('refreshFixtures').timeBased().everyHours(6).create();
 }
+
+/**
+ * One-time setup for the sibling groupes.fantasy-coach.fr project — creates
+ * a "Groupes" tab in this same spreadsheet (Gameweek | Équipe | Image URL,
+ * one row per team per gameweek) so the teammate keeps editing everything
+ * in one familiar file instead of learning a second spreadsheet. Prefilled
+ * with the J01-J04 data recovered from the old Wix CMS "Groupes" collection
+ * (72 rows = 18 teams x 4 gameweeks). Blank Image URL cells below are teams
+ * whose Wix record had no groupe image at all for that gameweek (mostly
+ * J04, the gameweek still in progress when this was pulled); rows already
+ * carrying the shared "Pas de groupe" placeholder photo keep that same
+ * static.wixstatic.com URL (resolved from its wix:image:// form) rather
+ * than being left blank, since that's a deliberate "no photo this week"
+ * graphic, not missing data.
+ *
+ * This function is NOT read by this project's own doGet/onEdit — a
+ * separate, standalone Apps Script (see groupes/apps-script/ in the
+ * groupes.fantasy-coach.fr repo) owns syncing this tab's edits onward to
+ * Supabase. Run once from the Apps Script editor's function dropdown; safe
+ * to re-run (no-ops if the tab already exists).
+ */
+function setupGroupesTab() {
+  var ss = SpreadsheetApp.getActive();
+  if (ss.getSheetByName('Groupes')) {
+    Logger.log('Groupes tab already exists — nothing to do. Spreadsheet ID: ' + ss.getId());
+    return;
+  }
+
+  var rows = [
+    [1, 'Angers', 'https://pbs.twimg.com/media/HQXWQMdWsAAer-J?format=jpg&name=small'],
+    [1, 'Auxerre', 'https://pbs.twimg.com/media/HQQaHHOXsAExePq?format=jpg&name=small'],
+    [1, 'Brest', 'https://pbs.twimg.com/media/HQRpGPeWAAMD8hU?format=jpg&name=4096x4096'],
+    [1, 'Le Havre', 'https://pbs.twimg.com/media/HQZTWAmX0AAARmj?format=jpg&name=large'],
+    [1, 'Le Mans', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [1, 'Lens', 'https://pbs.twimg.com/media/HQPwuFdXIAEk47_?format=jpg&name=small'],
+    [1, 'Lille', 'https://pbs.twimg.com/media/HQWDYQYWAAAWEiN?format=jpg&name=4096x4096'],
+    [1, 'Lorient', 'https://pbs.twimg.com/media/HQT7FsSXAAE02nA?format=jpg&name=large'],
+    [1, 'Lyon', 'https://pbs.twimg.com/media/HQQFfBPXMAAaRSe?format=jpg&name=small'],
+    [1, 'Marseille', 'https://pbs.twimg.com/media/HQPJlgXXwAAIvH_?format=jpg&name=small'],
+    [1, 'Monaco', 'https://pbs.twimg.com/media/HQVMKcwWAAIt-4U?format=jpg&name=small'],
+    [1, 'Nice', 'https://pbs.twimg.com/media/HQUJxYEWQAAfYTA?format=jpg&name=small'],
+    [1, 'Paris FC', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [1, 'Paris SG', 'https://pbs.twimg.com/media/HQZapayWoAAcKyc?format=jpg&name=large'],
+    [1, 'Rennes', 'https://pbs.twimg.com/media/HQZTEQ7WEAAk7lF?format=jpg&name=large'],
+    [1, 'Strasbourg', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [1, 'Toulouse', 'https://pbs.twimg.com/media/HQQ0l8Ma0AAi1FL?format=jpg&name=small'],
+    [1, 'Troyes', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [2, 'Angers', 'https://pbs.twimg.com/media/HQ2Bh_cWcAEyZJ0?format=jpg&name=small'],
+    [2, 'Auxerre', 'https://pbs.twimg.com/media/HQ0PPe3XIAE8gqg?format=jpg&name=small'],
+    [2, 'Brest', 'https://pbs.twimg.com/media/HQ0ygACXwAA89kF?format=jpg&name=4096x4096'],
+    [2, 'Le Havre', 'https://pbs.twimg.com/media/HQ48uNkX0AA8FSY?format=jpg&name=small'],
+    [2, 'Le Mans', 'https://pbs.twimg.com/media/HQ567eDXgAAJ5rL?format=jpg&name=small'],
+    [2, 'Lens', 'https://pbs.twimg.com/media/HQ0UNEmWcAAn2yP?format=jpg&name=small'],
+    [2, 'Lille', 'https://pbs.twimg.com/media/HQvwTydW0AA-dVl?format=jpg&name=large'],
+    [2, 'Lorient', 'https://pbs.twimg.com/media/HQ0kLHnWIAAUzZm?format=jpg&name=large'],
+    [2, 'Lyon', 'https://pbs.twimg.com/media/HQz-UOAWsAAQ1v9?format=jpg&name=large'],
+    [2, 'Marseille', 'https://pbs.twimg.com/media/HQ9ars7XQAA2QwP?format=jpg&name=small'],
+    [2, 'Monaco', 'https://pbs.twimg.com/media/HQ90XGaW4AAOV-w?format=jpg&name=4096x4096'],
+    [2, 'Nice', 'https://pbs.twimg.com/media/HQ56vNSWYAAwXbw?format=jpg&name=small'],
+    [2, 'Paris FC', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [2, 'Paris SG', 'https://pbs.twimg.com/media/HQzO79RWcAAVPyx?format=jpg&name=small'],
+    [2, 'Rennes', 'https://pbs.twimg.com/media/HQ9bNSpXsAAI1LE?format=jpg&name=small'],
+    [2, 'Strasbourg', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [2, 'Toulouse', 'https://pbs.twimg.com/media/HQ0RY2JWQAAnpqE?format=jpg&name=large'],
+    [2, 'Troyes', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [3, 'Angers', 'https://pbs.twimg.com/media/HRfZQ70XcAMWhKm?format=jpg&name=small'],
+    [3, 'Auxerre', 'https://pbs.twimg.com/media/HRSyCGmWQAAyJeG?format=jpg&name=large'],
+    [3, 'Brest', 'https://pbs.twimg.com/media/HRZ7zyIaAAAPf_J?format=jpg&name=4096x4096'],
+    [3, 'Le Havre', 'https://pbs.twimg.com/media/HRaLi9bbMAA7BjA?format=jpg&name=small'],
+    [3, 'Le Mans', 'https://pbs.twimg.com/media/HRZRnG3XIAEZv04?format=jpg&name=small'],
+    [3, 'Lens', 'https://pbs.twimg.com/media/HRX8lN1XsAE4igR?format=jpg&name=small'],
+    [3, 'Lille', 'https://pbs.twimg.com/media/HRSe-9OXEAYkwcT?format=jpg&name=small'],
+    [3, 'Lorient', 'https://pbs.twimg.com/media/HRcXdQdacAAeYR1?format=jpg&name=small'],
+    [3, 'Lyon', 'https://pbs.twimg.com/media/HRSyUbZWUAIyEhs?format=jpg&name=small'],
+    [3, 'Marseille', 'https://pbs.twimg.com/media/HRhVYxmWAAAvKmP?format=jpg&name=small'],
+    [3, 'Monaco', 'https://pbs.twimg.com/media/HRTOCZqbYAAP6N5?format=jpg&name=large'],
+    [3, 'Nice', 'https://pbs.twimg.com/media/HRcP7uvbQAAFdDZ?format=jpg&name=small'],
+    [3, 'Paris FC', ''],
+    [3, 'Paris SG', 'https://pbs.twimg.com/media/HRW_axZaQAAqyw4?format=jpg&name=large'],
+    [3, 'Rennes', ''],
+    [3, 'Strasbourg', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [3, 'Toulouse', 'https://pbs.twimg.com/media/HRN1r8fXgAAeOiV?format=jpg&name=small'],
+    [3, 'Troyes', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [4, 'Angers', 'https://pbs.twimg.com/media/HSAJQiBXgAEssFM?format=jpg&name=small'],
+    [4, 'Auxerre', 'https://pbs.twimg.com/media/HR8TaMHWIAgi6wi?format=jpg&name=4096x4096'],
+    [4, 'Brest', ''],
+    [4, 'Le Havre', 'https://pbs.twimg.com/media/HSBA1B1WwAE6-5g?format=jpg&name=small'],
+    [4, 'Le Mans', 'https://pbs.twimg.com/media/HSCDcK9bgAAtIdZ?format=jpg&name=small'],
+    [4, 'Lens', ''],
+    [4, 'Lille', ''],
+    [4, 'Lorient', 'https://pbs.twimg.com/media/HSAaasmXAAgb4OJ?format=jpg&name=small'],
+    [4, 'Lyon', ''],
+    [4, 'Marseille', 'https://pbs.twimg.com/media/HR7PCpiW0AQgSEb?format=jpg&name=large'],
+    [4, 'Monaco', 'https://pbs.twimg.com/media/HR8Rp4xawAEjBT9?format=jpg&name=4096x4096'],
+    [4, 'Nice', ''],
+    [4, 'Paris FC', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [4, 'Paris SG', ''],
+    [4, 'Rennes', 'https://pbs.twimg.com/media/HR7C3lNaMAE_fQE?format=jpg&name=large'],
+    [4, 'Strasbourg', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png'],
+    [4, 'Toulouse', 'https://pbs.twimg.com/media/HR8wPrEbcAMdRn_?format=png&name=small'],
+    [4, 'Troyes', 'https://static.wixstatic.com/media/f084b3_f702ce5ad01e442faa87fe1f9c92f42f~mv2.png']
+  ];
+
+  var sheet = ss.insertSheet('Groupes');
+  sheet.getRange(1, 1, 1, 3).setValues([['Gameweek', 'Équipe', 'Image URL']]);
+  sheet.setFrozenRows(1);
+  sheet.getRange(2, 1, rows.length, 3).setValues(rows);
+  sheet.autoResizeColumn(2);
+
+  Logger.log('Groupes tab created with ' + rows.length + ' rows. Spreadsheet ID: ' + ss.getId());
+}
