@@ -142,23 +142,9 @@
     border-radius: 2px;
     padding: 0.05rem;
   }
-  /* One card per team, cards fill the row on wide screens since a pitch
-     diagram needs real width to stay readable — unlike DNP's list rows,
-     which work fine full-width-stacked at any size. */
-  .team-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-  @media (min-width: 640px) {
-    .team-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (min-width: 960px) {
-    .team-grid { grid-template-columns: repeat(3, 1fr); }
-  }
   /* One section per matchday (Vendredi/Samedi/Dimanche, ...), each holding
-     its own .team-grid — lets a visitor scan straight to "who plays when"
-     for live-substitute timing instead of hunting a flat grid. */
+     its own .match-list — lets a visitor scan straight to "who plays when"
+     for live-substitute timing instead of hunting a flat list. */
   .day-section + .day-section { margin-top: 2rem; }
   .day-heading {
     font-size: 1.05rem;
@@ -167,36 +153,63 @@
     padding-bottom: 0.4rem;
     border-bottom: 1px solid var(--border);
   }
-  /* Home/away + opponent + kickoff, right under the team header — the
-     kickoff time here (not just the day heading) is what tells apart two
-     cards that share the same matchday. */
-  .team-fixture {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.8rem;
-    color: var(--muted);
-    margin: -0.35rem 0 0.75rem;
-  }
-  .fixture-icon { font-size: 0.9rem; line-height: 1; }
-  .team-card {
-    display: flex;
-    flex-direction: column;
-    background: var(--card);
+  .match-list { display: flex; flex-direction: column; gap: 1.5rem; }
+  .match-card {
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 0.9rem 1rem 1rem;
+    overflow: hidden;
+    background: var(--card);
   }
-  /* Two rows: .team-header-top (logo/name/score/formation) plus the
-     <fc-team-form> widget on its own line below — see renderTeamCard_. */
+  .match-kickoff {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding: 0.4rem 0.5rem;
+    background: #f5f4f2;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Mobile (default): each team's heading and its DNP capsule share a row
+     (heading left, capsule right), stacked home-row/pitch/away-row.
+     Desktop (see the min-width query below): headings become full-width
+     bars above/below the pitch; only the capsules move into a column on
+     the pitch's right, each vertically aligned with its own half. Heading
+     and capsule are separate grid items (not nested) precisely so this
+     regrouping is just a change of grid-template-areas, no DOM change.
+     Ported from presentations' .match-body. */
+  .match-body {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "home-heading home-capsule"
+      "pitch pitch"
+      "away-heading away-capsule";
+    align-items: start;
+  }
+  .team-heading-home { grid-area: home-heading; }
+  .team-heading-away { grid-area: away-heading; }
+  .team-capsule-home { grid-area: home-capsule; }
+  .team-capsule-away { grid-area: away-capsule; }
+  .match-body .pitch { grid-area: pitch; }
+  .team-heading-home, .team-heading-away, .team-capsule-home, .team-capsule-away {
+    padding: 0.6rem 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .match-body {
+      grid-template-columns: 1fr minmax(200px, 260px);
+      grid-template-rows: auto 1fr 1fr auto;
+      grid-template-areas:
+        "home-heading home-heading"
+        "pitch home-capsule"
+        "pitch away-capsule"
+        "away-heading away-heading";
+    }
+  }
   .team-header {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
-    font-size: 1.05rem;
-    margin: 0 0 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid var(--accent);
+    font-weight: 700;
+    min-width: 0;
   }
   .team-header-top {
     display: flex;
@@ -238,18 +251,6 @@
     .team-name-short { display: none; }
     .team-name-full { display: inline; }
   }
-  /* Per-team accuracy mark, right after the team name — styled like a
-     hand-scrawled grade (bigger, bold, tilted) rather than a normal badge.
-     Only present once "actuelles" has a result recorded for this team. */
-  .team-score {
-    flex: none;
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #d92b2b;
-    transform: rotate(-8deg);
-    display: inline-block;
-    line-height: 1;
-  }
   .team-formation {
     flex: none;
     background: #eaf3fc;
@@ -259,23 +260,72 @@
     padding: 0.15rem 0.5rem;
     border-radius: 999px;
   }
-  /* Pitch: a vertical strip (goalkeeper's own goal at the bottom, attack at
-     the top — mirrors how lineup graphics are usually drawn) built entirely
-     from CSS gradients/borders, no image assets. */
+  /* DNP capsule: a compact link-wrapped card, simplified (icon + Lastname
+     F. only) -- the full detail (blessure/suspendu/... reason, expected
+     return) lives on l1.dnp.fantasy-coach.fr itself, which the capsule
+     links to. Ported from presentations. */
+  .dnp-capsule {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.35rem 0.55rem;
+    background: #faf9f8;
+  }
+  @media (min-width: 480px) {
+    .dnp-capsule { max-width: 11rem; }
+  }
+  .dnp-capsule:hover { border-color: var(--accent); background: #f2f8fd; }
+  .dnp-capsule-empty {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .dnp-capsule-player {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dnp-capsule-icon { flex: none; font-size: 0.8rem; line-height: 1; }
+  /* Plain "+" styled in CSS, not an emoji, for the "blessure" icon -- same
+     as l1.dnp.fantasy-coach.fr's frontend. */
+  .dnp-capsule-icon.icon-blessure { color: #dc2626; font-weight: 800; font-size: 1rem; }
+  /* Per-team accuracy mark, drawn over the pitch's own top-left/bottom-left
+     corners (see renderMatchCard_) rather than in a header row, since both
+     teams now share one pitch -- styled like a hand-scrawled grade
+     (bigger, bold, tilted) rather than a normal badge. Only present once
+     "actuelles" has a result recorded for that team. */
+  .team-score {
+    position: absolute;
+    z-index: 2;
+    left: 0.4rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #d92b2b;
+    transform: rotate(-8deg);
+    line-height: 1;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  .pitch-score-home { top: 0.3rem; }
+  .pitch-score-away { bottom: 0.3rem; }
+  /* Pitch: home team's own goal at the very top, away team's own goal at
+     the very bottom, both attacking toward the shared halfway line/center
+     circle in the middle -- one continuous strip, not two separate mini
+     pitches. Ported from presentations. */
   .pitch {
     position: relative;
     background: linear-gradient(180deg, var(--pitch-top) 0%, var(--pitch-bottom) 100%);
-    border-radius: 10px;
     padding: 0.85rem 0.4rem;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     gap: 0.5rem;
-    min-height: 300px;
-    /* Grows to fill whatever height the grid stretched .team-card to (all
-       cards in a row match the tallest), so formations with fewer lines
-       (e.g. 4-3-3) get a taller pitch rather than a shorter card. */
-    flex: 1;
+    min-height: 520px;
     overflow: hidden;
   }
   .pitch::before {
@@ -297,6 +347,13 @@
     border: 2px solid rgba(255, 255, 255, 0.45);
     border-radius: 50%;
     transform: translate(-50%, -50%);
+  }
+  .pitch-half {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
   }
   .pitch-line {
     position: relative;
@@ -409,7 +466,7 @@
   <div id="badge-legend" class="badge-legend"></div>
 
   <p id="status-line" class="status-line"></p>
-  <div id="team-grid" class="journee-results"></div>
+  <div id="match-list" class="journee-results"></div>
   <noscript><p>Activez JavaScript pour afficher les compositions probables.</p></noscript>
 
   <fc-feedback project="compos"></fc-feedback>
@@ -431,10 +488,17 @@
   // cache being stale vs. Apps Script itself misbehaving).
   var API_BASE = new URLSearchParams(location.search).get('api') ||
     'https://compos-l1-cache.fantasycoachfr.workers.dev';
+  // DNP's own Worker cache -- this page now also pulls in each team's
+  // unavailable-player capsule, ported from the sibling presentations
+  // project (see buildMatches_/renderDnpCapsule_ below). ?api_dnp=<url>
+  // overrides it the same way ?api= overrides API_BASE above.
+  var API_BASE_DNP = new URLSearchParams(location.search).get('api_dnp') ||
+    'https://dnp-l1-cache.fantasycoachfr.workers.dev';
+  var DNP_SITE_URL = 'https://l1.dnp.fantasy-coach.fr/';
 
   var select = document.getElementById('journee-select');
   var statusLine = document.getElementById('status-line');
-  var teamGrid = document.getElementById('team-grid');
+  var matchList = document.getElementById('match-list');
   var gameweekScoreEl = document.getElementById('gameweek-score');
   var lastUpdatedEl = document.getElementById('last-updated');
 
@@ -676,6 +740,74 @@
   }
   renderBadgeLegend();
 
+  // Ported from presentations' frontend/index.html verbatim.
+  var REASON_ICON = {
+    disponible: '✅',
+    suspendu: '🟥',
+    blessure: '+',
+    personnel: '🤝',
+    hors_groupe: '🙅',
+    transfert: '✈️',
+    incertain: '❓'
+  };
+  var REASON_LABEL = {
+    disponible: 'Disponible',
+    suspendu: 'Suspendu',
+    blessure: 'Blessé',
+    personnel: 'Raison personnelle',
+    hors_groupe: 'Hors groupe',
+    transfert: 'Transfert',
+    incertain: 'Incertain'
+  };
+
+  // Simplified vs. l1.dnp.fantasy-coach.fr's own row (no poste/raison/retour
+  // columns) -- icon + "Lastname F." only, full detail lives on the DNP
+  // page itself, which the whole capsule links to.
+  function formatPlayerName_(prenom, nom) {
+    var initial = String(prenom || '').trim().charAt(0);
+    return String(nom || '').trim() + (initial ? ' ' + initial + '.' : '');
+  }
+
+  // Display order: injured first (most clear-cut/impactful), then
+  // suspended (equally certain), then out-of-group, personal reasons,
+  // transfer, and finally the least certain (incertain) last. "disponible"
+  // is filtered out entirely below -- this capsule is about who's
+  // unavailable, not confirming who isn't.
+  var REASON_ORDER = ['blessure', 'suspendu', 'hors_groupe', 'personnel', 'transfert', 'incertain'];
+
+  function renderDnpCapsule_(joueurs) {
+    var capsule = el('a', {
+      class: 'dnp-capsule',
+      href: DNP_SITE_URL,
+      target: '_blank',
+      rel: 'noopener',
+      title: 'Voir le détail sur l1.dnp.fantasy-coach.fr'
+    });
+    var sorted = (joueurs || [])
+      .filter(function (j) { return j.categorie !== 'disponible'; })
+      .slice()
+      .sort(function (a, b) {
+        var ai = REASON_ORDER.indexOf(a.categorie);
+        var bi = REASON_ORDER.indexOf(b.categorie);
+        if (ai === -1) ai = REASON_ORDER.length;
+        if (bi === -1) bi = REASON_ORDER.length;
+        return ai - bi;
+      });
+    if (sorted.length === 0) {
+      capsule.appendChild(el('span', { class: 'dnp-capsule-empty', text: 'Aucun indisponible connu' }));
+      return capsule;
+    }
+    sorted.forEach(function (j) {
+      var categorie = REASON_ICON.hasOwnProperty(j.categorie) ? j.categorie : 'incertain';
+      var row = el('div', { class: 'dnp-capsule-player' });
+      var iconClass = 'dnp-capsule-icon' + (categorie === 'blessure' ? ' icon-blessure' : '');
+      row.appendChild(el('span', { class: iconClass, title: REASON_LABEL[categorie], text: REASON_ICON[categorie] }));
+      row.appendChild(el('span', { text: formatPlayerName_(j.prenom, j.nom) }));
+      capsule.appendChild(row);
+    });
+    return capsule;
+  }
+
   function teamInitials(equipe) {
     return String(equipe || '?')
       .split(/\s+/)
@@ -749,44 +881,58 @@
     return line;
   }
 
-  function renderPitch(team) {
-    var joueurs = team.joueurs || [];
+  // orientation 'goal-top' (home team: own goal at the top of the shared
+  // pitch, attacking downward toward the shared center) or 'goal-bottom'
+  // (away team: own goal at the bottom, attacking upward toward the
+  // center) -- ported from presentations' renderHalfPitch, replacing the
+  // old per-team full-pitch renderPitch now that both teams in a match
+  // share one continuous pitch (see renderMatchCard_).
+  function renderHalfPitch(team, orientation) {
+    var half = el('div', { class: 'pitch-half' });
+    var joueurs = (team && team.joueurs) || [];
     var gk = joueurs[0];
     var outfield = joueurs.slice(1);
-    var lines = parseFormationLines(team.formation);
+    var lines = parseFormationLines(team && team.formation);
     var sum = lines ? lines.reduce(function (a, b) { return a + b; }, 0) : 0;
-    var color = TEAM_COLORS[team.equipe] || DEFAULT_SHIRT_COLOR;
+    var color = TEAM_COLORS[team && team.equipe] || DEFAULT_SHIRT_COLOR;
 
-    var pitch = el('div', { class: 'pitch' });
-
+    var groups = null;
     if (lines && sum === outfield.length) {
-      // Attackers (last formation number) nearest the top of the pitch,
-      // defenders nearest the goalkeeper at the bottom.
       var idx = 0;
-      var groups = lines.map(function (n) {
+      groups = lines.map(function (n) {
         var g = outfield.slice(idx, idx + n);
         idx += n;
         return g;
       });
-      groups.slice().reverse().forEach(function (g) { pitch.appendChild(renderLine(g, color)); });
-    } else if (outfield.length) {
-      // Formation string missing/malformed/inconsistent with the player
-      // count — fall back to one undifferentiated line rather than guessing.
-      pitch.appendChild(renderLine(outfield, color));
     }
 
-    pitch.appendChild(renderLine(gk ? [gk] : [], GK_SHIRT_COLOR));
-    return pitch;
+    var gkLine = renderLine(gk ? [gk] : [], GK_SHIRT_COLOR);
+    if (orientation === 'goal-top') {
+      half.appendChild(gkLine);
+      if (groups) {
+        groups.forEach(function (g) { half.appendChild(renderLine(g, color)); });
+      } else if (outfield.length) {
+        half.appendChild(renderLine(outfield, color));
+      }
+    } else {
+      if (groups) {
+        groups.slice().reverse().forEach(function (g) { half.appendChild(renderLine(g, color)); });
+      } else if (outfield.length) {
+        half.appendChild(renderLine(outfield, color));
+      }
+      half.appendChild(gkLine);
+    }
+    return half;
   }
 
-  function renderTeamCard_(team) {
-    var card = el('div', { class: 'team-card' });
-    // Two rows, ported from presentations' renderTeamHeading_: logo/name/
-    // score/formation on top, the <fc-team-form> last-5-results widget on
-    // its own row below. Keeping the widget off the name row matters at
-    // mobile width -- putting it inline there caused a real overflow bug
-    // in presentations, fixed by this same two-row split.
-    var header = el('div', { class: 'team-header' });
+  // Logo/name/formation, plus the <fc-team-form> last-5-results widget on
+  // its own row below -- ported from presentations' renderTeamHeading_.
+  // Team accuracy score is NOT here: it's drawn over the pitch's own
+  // top-left/bottom-left corners instead (see renderMatchCard_), since
+  // both teams now share one pitch rather than each having their own
+  // header row to put it in.
+  function renderTeamHeading_(team) {
+    var heading = el('div', { class: 'team-header' });
     var top = el('div', { class: 'team-header-top' });
     var logoUrl = TEAM_LOGOS[team.equipe];
     if (logoUrl) {
@@ -802,34 +948,81 @@
     // desktop -- see .team-name-full/.team-name-short below.
     top.appendChild(el('span', { class: 'team-name team-name-short', text: TEAM_CODES[team.equipe] || team.equipe }));
     top.appendChild(el('span', { class: 'team-name team-name-full', text: TEAM_FULL_NAMES[team.equipe] || team.equipe }));
-    if (team.score) top.appendChild(el('span', { class: 'team-score', text: team.score.correct + '/' + team.score.total }));
     if (team.formation) top.appendChild(el('span', { class: 'team-formation', text: team.formation }));
-    header.appendChild(top);
-    header.appendChild(el('fc-team-form', { team: team.equipe, league: 'L1' }));
-    card.appendChild(header);
-    if (team.fixture) card.appendChild(renderFixtureLine_(team.fixture));
-    card.appendChild(renderPitch(team));
-    return card;
+    heading.appendChild(top);
+    heading.appendChild(el('fc-team-form', { team: team.equipe, league: 'L1' }));
+    return heading;
   }
 
-  // Home/away icon + opponent + local kickoff time, e.g. "🏠 vs Lille ·
-  // 21:05". The icon alone (reçoit/se déplace) doesn't tell two cards
-  // sharing the same match apart, so the opponent name and kickoff time are
-  // what actually matter here for lining up live-substitute timing against
-  // the day grouping below.
-  function renderFixtureLine_(fixture) {
-    var d = new Date(fixture.kickoff);
-    var time = isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('fr-FR', {
-      hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
-    }).format(d);
-    var icon = el('span', {
-      class: 'fixture-icon',
-      text: fixture.isHome ? '🏠' : '✈️',
-      title: fixture.isHome ? 'Reçoit' : 'Se déplace',
-      'aria-hidden': 'true'
+  // Pairs compos' per-team rows (each carrying its own fixture: opponent +
+  // isHome + kickoff) into one match per home/away pair -- compos' API is
+  // per-team, not per-match, so this is done client-side. Ported from
+  // presentations' buildMatches_.
+  function buildMatches_(teams) {
+    var byName = {};
+    (teams || []).forEach(function (t) { byName[t.equipe] = t; });
+    var seen = {};
+    var matches = [];
+    (teams || []).forEach(function (t) {
+      if (seen[t.equipe] || !t.fixture) return;
+      var opponent = byName[t.fixture.opponent];
+      seen[t.equipe] = true;
+      if (opponent) seen[opponent.equipe] = true;
+      var home = t.fixture.isHome ? t : opponent;
+      var away = t.fixture.isHome ? opponent : t;
+      if (!home || !away) return; // opponent's own row missing from this journée's data
+      matches.push({ home: home, away: away, kickoff: t.fixture.kickoff });
     });
-    var label = el('span', { text: 'vs ' + fixture.opponent + (time ? ' · ' + time : '') });
-    return el('div', { class: 'team-fixture' }, [icon, label]);
+    matches.sort(function (a, b) { return new Date(a.kickoff) - new Date(b.kickoff); });
+    return matches;
+  }
+
+  function renderMatchCard_(match, dnpByTeam) {
+    var card = el('div', { class: 'match-card' });
+
+    var d = new Date(match.kickoff);
+    var when = isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris'
+    }).format(d);
+    if (when) card.appendChild(el('div', { class: 'match-kickoff', text: when.charAt(0).toUpperCase() + when.slice(1) }));
+
+    var homeHeading = renderTeamHeading_(match.home);
+    homeHeading.classList.add('team-heading-home');
+    var awayHeading = renderTeamHeading_(match.away);
+    awayHeading.classList.add('team-heading-away');
+    var homeCapsule = renderDnpCapsule_(dnpByTeam[match.home.equipe]);
+    homeCapsule.classList.add('team-capsule-home');
+    var awayCapsule = renderDnpCapsule_(dnpByTeam[match.away.equipe]);
+    awayCapsule.classList.add('team-capsule-away');
+
+    var pitch = el('div', { class: 'pitch' });
+    // Accuracy badges over the pitch's own corners -- home (drawn at the
+    // top) top-left, away (drawn at the bottom) bottom-left -- rather than
+    // in either heading row, since both teams now share this one pitch.
+    if (match.home.score) {
+      pitch.appendChild(el('span', {
+        class: 'team-score pitch-score-home',
+        text: match.home.score.correct + '/' + match.home.score.total
+      }));
+    }
+    if (match.away.score) {
+      pitch.appendChild(el('span', {
+        class: 'team-score pitch-score-away',
+        text: match.away.score.correct + '/' + match.away.score.total
+      }));
+    }
+    pitch.appendChild(renderHalfPitch(match.home, 'goal-top'));
+    pitch.appendChild(renderHalfPitch(match.away, 'goal-bottom'));
+
+    var body = el('div', { class: 'match-body' });
+    body.appendChild(homeHeading);
+    body.appendChild(homeCapsule);
+    body.appendChild(pitch);
+    body.appendChild(awayCapsule);
+    body.appendChild(awayHeading);
+    card.appendChild(body);
+
+    return card;
   }
 
   // "Journée 12" -> "Matchs du vendredi 5 septembre", grouped by Paris
@@ -852,59 +1045,56 @@
     };
   }
 
-  function groupTeamsByDay_(teams) {
+  function groupMatchesByDay_(matches) {
     var byKey = {};
     var undated = [];
-    teams.forEach(function (team) {
-      var group = team.fixture ? dayGroupKey_(team.fixture.kickoff) : null;
-      if (!group) { undated.push(team); return; }
-      if (!byKey[group.key]) byKey[group.key] = { label: group.label, date: group.date, teams: [] };
-      byKey[group.key].teams.push(team);
+    matches.forEach(function (m) {
+      var group = dayGroupKey_(m.kickoff);
+      if (!group) { undated.push(m); return; }
+      if (!byKey[group.key]) byKey[group.key] = { label: group.label, date: group.date, matches: [] };
+      byKey[group.key].matches.push(m);
     });
     var days = Object.keys(byKey).map(function (k) { return byKey[k]; })
       .sort(function (a, b) { return a.date - b.date; });
-    days.forEach(function (day) {
-      day.teams.sort(function (a, b) { return new Date(a.fixture.kickoff) - new Date(b.fixture.kickoff); });
-    });
     return { days: days, undated: undated };
   }
 
-  function renderTeams(teams) {
-    teamGrid.innerHTML = '';
-    if (!teams || teams.length === 0) {
-      teamGrid.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition disponible pour cette journée.' }));
+  function renderMatches_(matches, dnpByTeam) {
+    matchList.innerHTML = '';
+    if (!matches || matches.length === 0) {
+      matchList.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition disponible pour cette journée.' }));
       return;
     }
 
-    var grouped = groupTeamsByDay_(teams);
+    var grouped = groupMatchesByDay_(matches);
 
     // No fixture data resolved for anyone (ligue1.fr unreachable, gameweek
-    // number not resolvable, ...) — fall back to one flat grid rather than
+    // number not resolvable, ...) — fall back to one flat list rather than
     // an awkward "Autres rencontres" heading with nothing else to contrast
     // it against.
     if (grouped.days.length === 0) {
-      var flatGrid = el('div', { class: 'team-grid' });
-      teams.forEach(function (team) { flatGrid.appendChild(renderTeamCard_(team)); });
-      teamGrid.appendChild(flatGrid);
+      var flatList = el('div', { class: 'match-list' });
+      matches.forEach(function (m) { flatList.appendChild(renderMatchCard_(m, dnpByTeam)); });
+      matchList.appendChild(flatList);
       return;
     }
 
     grouped.days.forEach(function (day) {
       var section = el('section', { class: 'day-section' });
       section.appendChild(el('h2', { class: 'day-heading', text: day.label }));
-      var grid = el('div', { class: 'team-grid' });
-      day.teams.forEach(function (team) { grid.appendChild(renderTeamCard_(team)); });
-      section.appendChild(grid);
-      teamGrid.appendChild(section);
+      var list = el('div', { class: 'match-list' });
+      day.matches.forEach(function (m) { list.appendChild(renderMatchCard_(m, dnpByTeam)); });
+      section.appendChild(list);
+      matchList.appendChild(section);
     });
 
     if (grouped.undated.length) {
       var section2 = el('section', { class: 'day-section' });
       section2.appendChild(el('h2', { class: 'day-heading', text: 'Autres rencontres' }));
-      var grid2 = el('div', { class: 'team-grid' });
-      grouped.undated.forEach(function (team) { grid2.appendChild(renderTeamCard_(team)); });
-      section2.appendChild(grid2);
-      teamGrid.appendChild(section2);
+      var list2 = el('div', { class: 'match-list' });
+      grouped.undated.forEach(function (m) { list2.appendChild(renderMatchCard_(m, dnpByTeam)); });
+      section2.appendChild(list2);
+      matchList.appendChild(section2);
     }
   }
 
@@ -913,7 +1103,7 @@
   }
 
   // ISO datetime -> "dd/mm  HH:mm" in Europe/Paris, same locale/timezone
-  // convention as renderFixtureLine_/dayGroupKey_ above. null (no edit
+  // convention as renderMatchCard_/dayGroupKey_ above. null (no edit
   // recorded yet, or an unparseable value) clears the display entirely
   // rather than showing a broken timestamp.
   function formatLastUpdated_(iso) {
@@ -935,22 +1125,41 @@
     lastUpdatedEl.appendChild(el('span', { class: 'last-updated-time', text: formatted }));
   }
 
+  // compos' journée labels are bare numbers ("1", "2", ...); DNP's are
+  // "Journée N". Both fetched by the same selected number, so this page's
+  // own picker options carry the bare number and this maps to DNP's shape
+  // -- same convention as presentations' dnpJourneeLabel_.
+  function dnpJourneeLabel_(number) {
+    return 'Journée ' + number;
+  }
+
   function loadJournee(journee) {
     setStatus('Chargement…');
-    teamGrid.innerHTML = '';
+    matchList.innerHTML = '';
     renderGameweekScore(null);
     renderLastUpdated(null);
-    fetchJson_(API_BASE + '?journee=' + encodeURIComponent(journee), 3, 2000)
-      .then(function (data) {
-        if (data && data.error) throw new Error(data.error);
+    Promise.all([
+      fetchJson_(API_BASE + '?journee=' + encodeURIComponent(journee), 3, 2000),
+      fetchJson_(API_BASE_DNP + '?journee=' + encodeURIComponent(dnpJourneeLabel_(journee)), 3, 2000)
+        .catch(function () { return { equipes: [] }; }) // DNP has nothing for this journée yet -- capsules just show "Aucun indisponible connu"
+    ])
+      .then(function (results) {
+        var composData = results[0];
+        var dnpData = results[1];
+        if (composData && composData.error) throw new Error(composData.error);
         setStatus('');
-        renderTeams(data.equipes);
-        renderGameweekScore(data.score);
-        renderLastUpdated(data.lastUpdated);
+
+        var dnpByTeam = {};
+        (dnpData && dnpData.equipes || []).forEach(function (t) { dnpByTeam[t.equipe] = t.joueurs || []; });
+
+        var matches = buildMatches_(composData.equipes);
+        renderMatches_(matches, dnpByTeam);
+        renderGameweekScore(composData.score);
+        renderLastUpdated(composData.lastUpdated);
       })
       .catch(function (err) {
         setStatus('');
-        teamGrid.appendChild(el('div', { class: 'error-state', text: 'Impossible de charger les données (' + err.message + ').' }));
+        matchList.appendChild(el('div', { class: 'error-state', text: 'Impossible de charger les données (' + err.message + ').' }));
       });
   }
 
@@ -1018,13 +1227,13 @@
       } else {
         select.appendChild(el('option', { text: 'Aucune journée disponible' }));
         select.disabled = true;
-        teamGrid.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition n’a encore été renseignée.' }));
+        matchList.appendChild(el('div', { class: 'empty-state', text: 'Aucune composition n’a encore été renseignée.' }));
       }
     })
     .catch(function (err) {
       select.innerHTML = '';
       select.appendChild(el('option', { text: 'Erreur de chargement' }));
-      teamGrid.appendChild(el('div', { class: 'error-state', text: 'Impossible de charger la liste des journées (' + err.message + ').' }));
+      matchList.appendChild(el('div', { class: 'error-state', text: 'Impossible de charger la liste des journées (' + err.message + ').' }));
     });
 })();
 </script>
