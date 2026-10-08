@@ -440,6 +440,16 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
     white-space: nowrap;
   }
+  /* Desktop: larger names on the pitch and in the DNP capsule (mobile
+     sizes above are fine as-is). */
+  @media (min-width: 640px) {
+    .player-label { font-size: 0.92rem; }
+    .dnp-capsule { max-width: none; padding: 0.45rem 0.7rem; }
+    .dnp-capsule-player { font-size: 0.95rem; }
+    .dnp-capsule-empty { font-size: 0.92rem; }
+    .dnp-capsule-icon { font-size: 1rem; }
+    .dnp-capsule-icon.icon-blessure { font-size: 1.25rem; }
+  }
   .empty-state, .error-state {
     text-align: center;
     color: var(--muted);
