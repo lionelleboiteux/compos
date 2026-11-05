@@ -145,7 +145,7 @@ var CACHE_TTL_SECONDS = 21600;
 // lastUpdated field at all, while other journées happened to have already
 // expired/recomputed. Bumping this forces every entry to recompute on the
 // next request after a shape change, independent of edits.
-var CACHE_SCHEMA_VERSION = 2;
+var CACHE_SCHEMA_VERSION = 3;
 
 function doGet(e) {
   var journee = e.parameter.journee;
@@ -280,12 +280,16 @@ function teamScore_(probableJoueurs, actualJoueurs) {
 // extra detail to discard.
 function nameCandidates_(rawName) {
   var raw = String(rawName || '');
-  var bracketMatch = raw.match(/\(([^)]*)\)/);
   var primary = normalizeBase_(raw.replace(/\([^)]*\)/g, ' '));
   var candidates = primary ? [primary] : [];
-  if (bracketMatch && bracketMatch[1]) {
-    var alt = normalizeBase_(bracketMatch[1]);
-    if (alt) candidates.push(alt);
+  // Every bracket counts, not just the first: "Gouiri (P) (Maupay)" has a
+  // penalty-taker marker before the real alternate. Standalone (P)/(C)
+  // markers are badges (see the frontend's parsePlayerName), not names.
+  var bracketRe = /\(([^)]*)\)/g;
+  var m;
+  while ((m = bracketRe.exec(raw)) !== null) {
+    var alt = normalizeBase_(m[1]);
+    if (alt && alt !== 'p' && alt !== 'c') candidates.push(alt);
   }
   return candidates;
 }
