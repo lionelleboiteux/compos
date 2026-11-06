@@ -145,7 +145,7 @@ var CACHE_TTL_SECONDS = 21600;
 // lastUpdated field at all, while other journées happened to have already
 // expired/recomputed. Bumping this forces every entry to recompute on the
 // next request after a shape change, independent of edits.
-var CACHE_SCHEMA_VERSION = 3;
+var CACHE_SCHEMA_VERSION = 4;
 
 function doGet(e) {
   var journee = e.parameter.journee;
@@ -317,6 +317,8 @@ function normalizeBase_(name) {
   return normalized
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // strip remaining accents (NFD combining marks)
     .replace(/[^a-z0-9\s'-]/g, ' ')
+    .replace(/-/g, ' ')                               // "Russel-Rowe" == "Russel Rowe"
+    .replace(/\s+(jr|sr|junior|senior)$/, '')         // "Casseres Jr" == "Casseres"
     .trim()
     .replace(/\s+/g, ' ');
 }
