@@ -5,9 +5,14 @@
   "compatibility_date": "2026-09-08",
   "observability": { "enabled": true },
   // The page itself is rendered by the Worker (src/render.js); public/ holds
-  // only its static files (og-image, ads.txt, the two shirt badges). The
-  // Worker runs first so "/" and "/journee/<n>" are never shadowed.
-  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  // only its static files (og-image, ads.txt, the two shirt badges). Only
+  // the dynamic paths run the Worker; static files are served directly and
+  // don't count against the Worker request quota.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/", "/journee/*", "/__*"]
+  },
   "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": true }],
   // The page is served from this custom domain; workers.dev stays enabled
   // for the JSON routes (debugging / older consumers).

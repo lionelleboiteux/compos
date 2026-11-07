@@ -226,6 +226,9 @@ async function fetchDnpByTeam(journee) {
     });
     if (!resp.ok) throw new Error('dnp responded ' + resp.status);
     const data = await resp.json();
+    // DNP answers 200 + {error} for a journée it doesn't know (no data, as
+    // for an empty one); any other error payload is a real failure.
+    if (data && data.error && !/inconnue/i.test(data.error)) throw new Error('dnp error: ' + data.error);
     ((data && data.equipes) || []).forEach((t) => { byTeam[t.equipe] = t.joueurs || []; });
     ok = true;
   } catch (err) {
