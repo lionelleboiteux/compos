@@ -1,6 +1,7 @@
 # Compos — Compositions Probables (Ligue 1)
 
-A page, separate from the Wix-hosted fantasy-coach.fr, showing — for a
+A page, separate from the Wix-hosted fantasy-coach.fr, rendered to HTML by
+a Cloudflare Worker (cached at the edge) and showing — for a
 selected journée — the likely starting XI and formation for every Ligue 1
 team, one card per team with a pitch diagram. Data comes from a private
 Google Sheet maintained by a teammate; the sheet itself is never published
@@ -26,8 +27,20 @@ Cloudflare Worker + KV (worker/) <---------
       |
       | JSON (only equipe/formation/joueurs — never the raw sheet)
       v
-frontend/index.html (static, GitHub Pages, l1.compos.fantasy-coach.fr)
+worker/src/render.js -> finished HTML (+ DNP capsules, current journée),
+held ~60s in the edge cache, served at l1.compos.fantasy-coach.fr
 ```
+
+**The page is rendered server-side.** Browsers no longer fetch any data:
+`GET /` (current journée) and `GET /journee/<n>` return complete HTML, so a
+blocked or flaky `workers.dev` hostname can no longer produce "Failed to
+fetch". The old JSON routes (`/?meta=1`, `/?journee=`) remain for debugging.
+If the data can't be produced at all the visitor gets a 503 page with a
+retry link. Static files (og-image, ads.txt, badges) live in `worker/public/`.
+
+**Cutover from GitHub Pages**: the old `frontend/` + `pages.yml` are gone.
+To move the domain: delete the `l1.compos` CNAME (→ github.io) in Cloudflare
+DNS, uncomment `routes` in `worker/wrangler.jsonc`, `wrangler deploy`.
 
 The Worker is a caching reverse proxy in front of the Apps Script API — see
 [Cloudflare Worker cache](#cloudflare-worker-cache-edge-caching-in-front-of-the-apps-script-api)

@@ -4,6 +4,14 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-08",
   "observability": { "enabled": true },
+  // The page itself is rendered by the Worker (src/render.js); public/ holds
+  // only its static files (og-image, ads.txt, the two shirt badges). The
+  // Worker runs first so "/" and "/journee/<n>" are never shadowed.
+  "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
+  "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": true }],
+  // Cutover (manual, see README): delete the l1.compos CNAME to GitHub Pages
+  // in Cloudflare DNS first, then uncomment and `wrangler deploy`.
+  // "routes": [{ "pattern": "l1.compos.fantasy-coach.fr", "custom_domain": true }],
   "kv_namespaces": [
     { "binding": "CACHE", "id": "2e8bedbee42c4b93a813533f0de24a7a" }
   ],

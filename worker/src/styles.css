@@ -1,0 +1,418 @@
+  :root {
+    /* fantasy-coach.fr's own blue (reused from pronos.fantasy-coach.fr and
+       l1.dnp.fantasy-coach.fr) so this page reads as part of the same site. */
+    --fc-blue: #3d9be9;
+    --fc-blue-light: #63b0ee;
+    --bg: #ffffff;
+    --card: #ffffff;
+    --ink: #1c1917;
+    --muted: #6b6560;
+    --border: #d6d3d1;
+    --accent: var(--fc-blue);
+    --accent-ink: #ffffff;
+    --pitch-top: #4caf62;
+    --pitch-bottom: #2e7d3f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0 1rem 1rem;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  .site-footer { text-align: center; font-size: 0.8rem; color: var(--muted); margin: 2.5rem 0 1rem; }
+  main { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0.5rem 0 1rem; }
+  .intro { margin-bottom: 1.25rem; }
+  .intro p { margin: 0.5rem 0; }
+  .journee-picker { margin-bottom: 1.5rem; }
+  .journee-picker label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
+  .journee-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .journee-picker select {
+    width: 100%;
+    max-width: 320px;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+    font-size: 1rem;
+  }
+  /* Gameweek-wide accuracy score, next to the picker — deliberately much
+     bigger than any other text on the page, it's the headline number. */
+  .gameweek-score {
+    flex: none;
+    font-size: clamp(1.8rem, 6vw, 2.6rem);
+    font-weight: 800;
+    color: var(--fc-blue);
+    line-height: 1;
+  }
+  .status-line { color: var(--muted); font-size: 0.9rem; margin: 0.5rem 0 1rem; }
+  /* Freshness indicator for the currently-loaded journée's data (see
+     Code.gs's lastUpdatedIso_) — the label stays modest, the timestamp
+     itself is the part worth noticing so it's set apart in size/weight. */
+  .last-updated {
+    margin: 0 0 1.25rem;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .last-updated-time {
+    margin-left: 0.4rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  /* Explains the two on-shirt badges (see .penalty-badge/.captain-badge)
+     once, above the results, rather than repeating a label on every shirt. */
+  .badge-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    align-items: center;
+    margin: 0 0 1rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  /* A small pitch-colored swatch stands in for the shirt so the badges
+     read the same way here as they do in the diagrams below. */
+  .legend-swatch {
+    flex: none;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 6px;
+    background: var(--pitch-bottom);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .legend-badge-penalty {
+    width: 1.05rem;
+    height: auto;
+  }
+  .legend-badge-captain {
+    width: 0.95rem;
+    height: auto;
+    background: #ffffff;
+    border-radius: 2px;
+    padding: 0.05rem;
+  }
+  /* One section per matchday (Vendredi/Samedi/Dimanche, ...), each holding
+     its own .match-list — lets a visitor scan straight to "who plays when"
+     for live-substitute timing instead of hunting a flat list. */
+  .day-section + .day-section { margin-top: 2rem; }
+  .day-heading {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .match-list { display: flex; flex-direction: column; gap: 1.5rem; }
+  .match-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .match-kickoff {
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+    padding: 0.4rem 0.5rem;
+    background: #f5f4f2;
+    border-bottom: 1px solid var(--border);
+  }
+  /* Mobile (default): each team's heading and its DNP capsule share a row
+     (heading left, capsule right), stacked home-row/pitch/away-row.
+     Desktop (see the min-width query below): headings become full-width
+     bars above/below the pitch; only the capsules move into a column on
+     the pitch's right, each vertically aligned with its own half. Heading
+     and capsule are separate grid items (not nested) precisely so this
+     regrouping is just a change of grid-template-areas, no DOM change.
+     Ported from presentations' .match-body. */
+  .match-body {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "home-heading home-capsule"
+      "pitch pitch"
+      "away-heading away-capsule";
+    align-items: start;
+  }
+  .team-heading-home { grid-area: home-heading; }
+  .team-heading-away { grid-area: away-heading; }
+  .team-capsule-home { grid-area: home-capsule; }
+  .team-capsule-away { grid-area: away-capsule; }
+  .match-body .pitch { grid-area: pitch; }
+  .team-heading-home, .team-heading-away, .team-capsule-home, .team-capsule-away {
+    padding: 0.6rem 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .match-body {
+      grid-template-columns: 1fr minmax(200px, 260px);
+      grid-template-rows: auto 1fr 1fr auto;
+      grid-template-areas:
+        "home-heading home-heading"
+        "pitch home-capsule"
+        "pitch away-capsule"
+        "away-heading away-heading";
+    }
+  }
+  .team-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 700;
+    min-width: 0;
+  }
+  .team-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+  .team-logo {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: contain;
+  }
+  .team-logo-fallback {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+  .team-name {
+    flex: 1;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* Full name at desktop, short/town name at mobile -- both rendered,
+     CSS picks which shows (ported from presentations). */
+  .team-name-full { display: none; }
+  @media (min-width: 640px) {
+    .team-name-short { display: none; }
+    .team-name-full { display: inline; }
+  }
+  .team-formation {
+    flex: none;
+    background: #eaf3fc;
+    color: var(--fc-blue);
+    font-weight: 700;
+    font-size: 0.78rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+  }
+  /* DNP capsule: a compact link-wrapped card, simplified (icon + Lastname
+     F. only) -- the full detail (blessure/suspendu/... reason, expected
+     return) lives on l1.dnp.fantasy-coach.fr itself, which the capsule
+     links to. Ported from presentations. */
+  .dnp-capsule {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.35rem 0.55rem;
+    background: #faf9f8;
+  }
+  @media (min-width: 480px) {
+    .dnp-capsule { max-width: 11rem; }
+  }
+  .dnp-capsule:hover { border-color: var(--accent); background: #f2f8fd; }
+  .dnp-capsule-empty {
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .dnp-capsule-player {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dnp-capsule-icon { flex: none; font-size: 0.8rem; line-height: 1; }
+  /* Plain "+" styled in CSS, not an emoji, for the "blessure" icon -- same
+     as l1.dnp.fantasy-coach.fr's frontend. */
+  .dnp-capsule-icon.icon-blessure { color: #dc2626; font-weight: 800; font-size: 1rem; }
+  /* Per-team accuracy mark, drawn over the pitch's own top-left/bottom-left
+     corners (see renderMatchCard_) rather than in a header row, since both
+     teams now share one pitch -- styled like a hand-scrawled grade
+     (bigger, bold, tilted) rather than a normal badge. Only present once
+     "actuelles" has a result recorded for that team. */
+  .team-score {
+    position: absolute;
+    z-index: 2;
+    left: 0.4rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #d92b2b;
+    transform: rotate(-8deg);
+    line-height: 1;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  .pitch-score-home { top: 0.3rem; }
+  .pitch-score-away { bottom: 0.3rem; }
+  /* Pitch: home team's own goal at the very top, away team's own goal at
+     the very bottom, both attacking toward the shared halfway line/center
+     circle in the middle -- one continuous strip, not two separate mini
+     pitches. Ported from presentations. */
+  .pitch {
+    position: relative;
+    background: linear-gradient(180deg, var(--pitch-top) 0%, var(--pitch-bottom) 100%);
+    padding: 0.85rem 0.4rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.5rem;
+    min-height: 520px;
+    overflow: hidden;
+  }
+  .pitch::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 6%;
+    right: 6%;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.45);
+  }
+  .pitch::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 64px;
+    height: 64px;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .pitch-half {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .pitch-line {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    /* Clustered around the center, not spread edge-to-edge: space-evenly
+       equalizes the gaps between item *edges*, which looks off-center once
+       labels have different widths (a line with one long name and one short
+       name visibly leans). Centering the group avoids that regardless of
+       label length. */
+    justify-content: center;
+    align-items: flex-start;
+    gap: clamp(0.3rem, 2vw, 1.1rem);
+  }
+  .player-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    /* Width follows the label instead of a fixed 3.4rem: a long label like
+       "Sahraoui (Onal)" needs the extra room to stay on one line, and
+       letting the chip grow to fit it (rather than wrapping/truncating)
+       reads better than keeping every chip the same width. The row is
+       still centered as a whole via justify-content on .pitch-line, so
+       uneven chip widths don't unbalance the layout. */
+    flex: 0 1 auto;
+    min-width: 3.4rem;
+  }
+  /* Wraps the shirt so badges (penalty taker, and later captain) can be
+     absolutely positioned over its corners without disturbing the
+     shirt+label column layout in .player-chip. */
+  .player-shirt-wrap {
+    position: relative;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: none;
+  }
+  .player-shirt {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  }
+  /* Bottom-right corner (the hem) of the shirt — the captain armband sits
+     on the opposite corner (the sleeve, top-left), so a player with both
+     never has the badges collide. */
+  .penalty-badge {
+    position: absolute;
+    right: -0.45rem;
+    bottom: -0.15rem;
+    width: 0.95rem;
+    height: auto;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+  }
+  /* Captain armband, worn on the sleeve (the shirt's top-left corner in
+     SHIRT_PATH). The icon is a black silhouette with no shirt-color-aware
+     styling of its own, so it gets a small white backing here — the same
+     reason the shirt itself is drawn with a white stroke — to stay visible
+     against dark kits (navy, black, purple, ...). */
+  .captain-badge {
+    position: absolute;
+    left: -0.25rem;
+    top: -0.1rem;
+    width: 0.9rem;
+    height: auto;
+    background: #ffffff;
+    border-radius: 2px;
+    padding: 0.03rem;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  }
+  .player-label {
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: center;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    white-space: nowrap;
+  }
+  /* Desktop: larger names on the pitch and in the DNP capsule (mobile
+     sizes above are fine as-is). */
+  @media (min-width: 640px) {
+    .player-label { font-size: 0.92rem; }
+    .dnp-capsule { max-width: none; padding: 0.45rem 0.7rem; }
+    .dnp-capsule-player { font-size: 0.95rem; }
+    .dnp-capsule-empty { font-size: 0.92rem; }
+    .dnp-capsule-icon { font-size: 1rem; }
+    .dnp-capsule-icon.icon-blessure { font-size: 1.25rem; }
+  }
+  .empty-state, .error-state {
+    text-align: center;
+    color: var(--muted);
+    padding: 2rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+  }
+  .error-state { color: #b91c1c; }
