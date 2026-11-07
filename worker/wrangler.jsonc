@@ -9,9 +9,10 @@
   // Worker runs first so "/" and "/journee/<n>" are never shadowed.
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": true },
   "rules": [{ "type": "Text", "globs": ["**/*.css"], "fallthrough": true }],
-  // Cutover (manual, see README): delete the l1.compos CNAME to GitHub Pages
-  // in Cloudflare DNS first, then uncomment and `wrangler deploy`.
-  // "routes": [{ "pattern": "l1.compos.fantasy-coach.fr", "custom_domain": true }],
+  // The page is served from this custom domain; workers.dev stays enabled
+  // for the JSON routes (debugging / older consumers).
+  "routes": [{ "pattern": "l1.compos.fantasy-coach.fr", "custom_domain": true }],
+  "workers_dev": true,
   "kv_namespaces": [
     { "binding": "CACHE", "id": "2e8bedbee42c4b93a813533f0de24a7a" }
   ],

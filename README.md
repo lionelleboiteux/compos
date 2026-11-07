@@ -38,9 +38,11 @@ fetch". The old JSON routes (`/?meta=1`, `/?journee=`) remain for debugging.
 If the data can't be produced at all the visitor gets a 503 page with a
 retry link. Static files (og-image, ads.txt, badges) live in `worker/public/`.
 
-**Cutover from GitHub Pages**: the old `frontend/` + `pages.yml` are gone.
-To move the domain: delete the `l1.compos` CNAME (→ github.io) in Cloudflare
-DNS, uncomment `routes` in `worker/wrangler.jsonc`, `wrangler deploy`.
+The domain `l1.compos.fantasy-coach.fr` is a Worker Custom Domain
+(`routes` in `worker/wrangler.jsonc`); it replaced the GitHub Pages CNAME
+(the old `frontend/` + `pages.yml` are gone). Keep `"workers_dev": true`
+there: setting `routes` otherwise disables the workers.dev hostname, which
+the JSON routes still use.
 
 The Worker is a caching reverse proxy in front of the Apps Script API — see
 [Cloudflare Worker cache](#cloudflare-worker-cache-edge-caching-in-front-of-the-apps-script-api)
